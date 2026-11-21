@@ -486,3 +486,42 @@ export function aggregateAnalyticsEvents(
     lastUpdatedAt: new Date().toISOString(),
   };
 }
+
+export const ANALYTICS_INQUIRY_MARKER = '__abv_analytics__';
+
+export function isAnalyticsFallbackInquiry(rec: Record<string, unknown> | null | undefined): boolean {
+  return Boolean(rec && rec.shoot_type === ANALYTICS_INQUIRY_MARKER);
+}
+
+export function toAnalyticsInquiryFallbackRecord(ev: AnalyticsEventRecord) {
+  return {
+    id: sanitizeId(ev.id, 'evt'),
+    name: truncateStr(ev.type, SCHEMA_LIMITS.inquiryName),
+    phone: '',
+    shoot_type: ANALYTICS_INQUIRY_MARKER,
+    shoot_date: '',
+    shoot_location: truncateStr(ev.projectId || '', SCHEMA_LIMITS.inquiryLocation),
+    message: truncateStr(ev.projectTitle || '', SCHEMA_LIMITS.inquiryMessage),
+    created_at: truncateStr(ev.created_at || new Date().toISOString(), SCHEMA_LIMITS.createdAtStr),
+  };
+}
+
+export function fromAnalyticsInquiryFallbackRecord(
+  rec: Record<string, unknown> | null | undefined
+): AnalyticsEventRecord | null {
+  if (!isAnalyticsFallbackInquiry(rec) || !rec) return null;
+  const normalized = normalizeAnalyticsEventPayload(
+    {
+      type: rec.name,
+      projectId: rec.shoot_location,
+      projectTitle: rec.message,
+    },
+    typeof rec.id === 'string' ? rec.id : undefined
+  );
+  if (!normalized) return null;
+  if (typeof rec.created_at === 'string' && rec.created_at.trim()) {
+    normalized.created_at = truncateStr(rec.created_at.trim(), SCHEMA_LIMITS.createdAtStr);
+  }
+  return normalized;
+}
+

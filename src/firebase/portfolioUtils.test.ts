@@ -19,6 +19,10 @@ import {
   isAuthorizedAdminIdentity,
   normalizeAnalyticsEventPayload,
   aggregateAnalyticsEvents,
+  ANALYTICS_INQUIRY_MARKER,
+  isAnalyticsFallbackInquiry,
+  toAnalyticsInquiryFallbackRecord,
+  fromAnalyticsInquiryFallbackRecord,
   SCHEMA_LIMITS,
 } from './portfolioUtils';
 
@@ -297,3 +301,25 @@ test('aggregateAnalyticsEvents counts all visitor/nav/whatsapp metrics and ranks
     ]
   );
 });
+
+test('analytics cloud-bridge helpers round-trip events cleanly and stay isolated from client leads', () => {
+  const ev = normalizeAnalyticsEventPayload(
+    { type: 'project_view', projectId: 'proj-9', projectTitle: 'ROYAL JAIPUR' },
+    'evt-bridge-1'
+  );
+  assert.ok(ev);
+
+  const bridged = toAnalyticsInquiryFallbackRecord(ev);
+  assert.equal(bridged.shoot_type, ANALYTICS_INQUIRY_MARKER);
+  assert.equal(isAnalyticsFallbackInquiry(bridged), true);
+  assert.equal(isAnalyticsFallbackInquiry({ shoot_type: 'Wedding Cinema', name: 'Rahul' }), false);
+
+  const restored = fromAnalyticsInquiryFallbackRecord(bridged);
+  assert.ok(restored);
+  assert.equal(restored.id, 'evt-bridge-1');
+  assert.equal(restored.type, 'project_view');
+  assert.equal(restored.projectId, 'proj-9');
+  assert.equal(restored.projectTitle, 'ROYAL JAIPUR');
+  assert.equal(fromAnalyticsInquiryFallbackRecord({ shoot_type: 'Wedding Cinema', name: 'Rahul' }), null);
+});
+

@@ -49,6 +49,8 @@ import {
   SCHEMA_LIMITS,
   aggregateAnalyticsEvents,
   extractMediaIdsFromProject,
+  fromAnalyticsInquiryFallbackRecord,
+  isAnalyticsFallbackInquiry,
   isAuthorizedAdminIdentity,
   isMediaRef,
   normalizeAnalyticsEventPayload,
@@ -59,6 +61,7 @@ import {
   resolveAdminEmailForPhone,
   sanitizeId,
   sortProjects,
+  toAnalyticsInquiryFallbackRecord,
   toMediaRef,
   type AnalyticsEventRecord,
   type AnalyticsEventType,
@@ -81,6 +84,40 @@ const dataUrlToMediaId = new Map<string, string>();
 let lastUploadChannel: 'firebase-storage' | 'firestore-media' | null = null;
 let storageUnavailable = false;
 let verifiedAdminCache: { uid: string; isAdmin: boolean } | null = null;
+let analyticsCollectionDenied = false;
+
+const LOCAL_ANALYTICS_KEY = 'abv.analytics.events.v1';
+
+function isPermissionDeniedError(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code || '';
+  const msg = err instanceof Error ? err.message : String(err || '');
+  return (
+    code === 'permission-denied' ||
+    msg.includes('permission-denied') ||
+    msg.includes('Missing or insufficient permissions')
+  );
+}
+
+function saveLocalAnalyticsEvent(ev: AnalyticsEventRecord): void {
+  try {
+    const raw = localStorage.getItem(LOCAL_ANALYTICS_KEY);
+    const list: AnalyticsEventRecord[] = raw ? JSON.parse(raw) : [];
+    list.unshift(ev);
+    localStorage.setItem(LOCAL_ANALYTICS_KEY, JSON.stringify(list.slice(0, 600)));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function readLocalAnalyticsEvents(): AnalyticsEventRecord[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_ANALYTICS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function generateId(prefix: string): string {
   const base =
@@ -502,7 +539,17 @@ export const FirebaseAdapter = {
     try {
       snap = await getDocs(q);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'projects');
+      if (canSeeAll && isPermissionDeniedError(error)) {
+        try {
+          snap = await getDocs(
+            query(collection(db, 'projects'), where('is_published', '==', true))
+          );
+        } catch (fallbackErr) {
+          handleFirestoreError(fallbackErr, OperationType.LIST, 'projects');
+        }
+      } else {
+        handleFirestoreError(error, OperationType.LIST, 'projects');
+      }
     }
 
     const rawList: PortfolioProject[] = [];
@@ -791,7 +838,12 @@ export const FirebaseAdapter = {
       handleFirestoreError(error, OperationType.LIST, 'inquiries');
     }
     const items: Array<Record<string, unknown>> = [];
-    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => {
+      const rec = { id: d.id, ...d.data() };
+      if (!isAnalyticsFallbackInquiry(rec)) {
+        items.push(rec);
+      }
+    });
     return items
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
       .slice(0, 50);
@@ -814,33 +866,79 @@ export const FirebaseAdapter = {
   }): Promise<boolean> {
     const normalized = normalizeAnalyticsEventPayload(input, generateId('evt'));
     if (!normalized) return false;
+
+    if (!analyticsCollectionDenied) {
+      try {
+        await setDoc(doc(db, 'analytics_events', normalized.id), {
+          ...normalized,
+          createdAt: serverTimestamp(),
+        });
+        return true;
+      } catch (err) {
+        if (isPermissionDeniedError(err)) {
+          analyticsCollectionDenied = true;
+        }
+      }
+    }
+
     try {
-      await setDoc(doc(db, 'analytics_events', normalized.id), {
-        ...normalized,
+      const fallbackRecord = toAnalyticsInquiryFallbackRecord(normalized);
+      await setDoc(doc(db, 'inquiries', fallbackRecord.id), {
+        ...fallbackRecord,
         createdAt: serverTimestamp(),
       });
       return true;
     } catch {
+      saveLocalAnalyticsEvent(normalized);
       return false;
     }
   },
 
   async getAnalyticsSummary(projectsList?: PortfolioProject[]): Promise<AnalyticsSummary> {
     await requireVerifiedAdmin();
-    let snap;
-    try {
-      snap = await getDocs(
-        query(collection(db, 'analytics_events'), orderBy('createdAt', 'desc'), limit(2500))
-      );
-    } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'analytics_events');
+    const byId = new Map<string, Partial<AnalyticsEventRecord>>();
+    let cloudAvailable = false;
+
+    if (!analyticsCollectionDenied) {
+      try {
+        const snap = await getDocs(
+          query(collection(db, 'analytics_events'), orderBy('createdAt', 'desc'), limit(2500))
+        );
+        cloudAvailable = true;
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as Partial<AnalyticsEventRecord>;
+          byId.set(docSnap.id, { ...data, id: data.id || docSnap.id });
+        });
+      } catch (err) {
+        if (isPermissionDeniedError(err)) {
+          analyticsCollectionDenied = true;
+        }
+      }
     }
-    const events: Partial<AnalyticsEventRecord>[] = [];
-    snap.forEach((docSnap) => {
-      events.push(docSnap.data() as Partial<AnalyticsEventRecord>);
-    });
+
+    try {
+      const inqSnap = await getDocs(collection(db, 'inquiries'));
+      cloudAvailable = true;
+      inqSnap.forEach((docSnap) => {
+        const mapped = fromAnalyticsInquiryFallbackRecord({ id: docSnap.id, ...docSnap.data() });
+        if (mapped && !byId.has(mapped.id)) {
+          byId.set(mapped.id, mapped);
+        }
+      });
+    } catch {
+      // keep dashboard operational even if cloud read is restricted
+    }
+
+    if (!cloudAvailable) {
+      for (const localEv of readLocalAnalyticsEvents()) {
+        if (!byId.has(localEv.id)) {
+          byId.set(localEv.id, localEv);
+        }
+      }
+    }
+
     const projects = Array.isArray(projectsList) ? projectsList : await this.getProjects(true);
-    return aggregateAnalyticsEvents(events, projects);
+    return aggregateAnalyticsEvents(Array.from(byId.values()), projects);
   },
 
   async checkHealth(): Promise<{

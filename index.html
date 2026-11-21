@@ -1927,7 +1927,7 @@ function openBookingDrawer() {
   bindInquiryForm(root);
 }
 /* ================= admin CMS (/amit231106) ================= */
-const ADMIN = { tab: 'dashboard', list: [], editing: null, q: '', user: null, seededChecked: false, analytics: null };
+const ADMIN = { tab: 'dashboard', list: [], editing: null, q: '', user: null, seededChecked: false, analytics: null, renderedPanelUid: null };
 function isAuthed() {
   if (App.adapter && App.adapter.name === 'firebase') {
     return Boolean(ADMIN.user && ADMIN.user.isAdmin);
@@ -1984,13 +1984,14 @@ async function renderAdmin() {
     ADMIN.user = await App.adapter.getAdminUser();
   }
   if (!isAuthed()) {
+    ADMIN.renderedPanelUid = null;
     renderAdminLogin(root);
   } else {
     await ensureFirebaseSeeded();
     renderAdminPanel(root);
   }
 }
-function hideAdmin() { const root = $('#admin-root'); root.classList.remove('on'); root.innerHTML = ''; }
+function hideAdmin() { ADMIN.renderedPanelUid = null; const root = $('#admin-root'); root.classList.remove('on'); root.innerHTML = ''; }
 /* ---------- login gate ---------- */
 function renderAdminLogin(root) {
   const isFirebase = App.adapter && App.adapter.name === 'firebase';
@@ -2042,8 +2043,11 @@ function renderAdminLogin(root) {
         if (ADMIN.user && ADMIN.user.isAdmin) {
           toast('Signed in to Studio Admin');
           await ensureFirebaseSeeded();
-          renderAdminPanel(root);
+          if (ADMIN.renderedPanelUid !== ADMIN.user.uid) {
+            renderAdminPanel(root);
+          }
         } else {
+          ADMIN.renderedPanelUid = null;
           renderAdminLogin(root);
         }
       } catch (err) {
@@ -2080,8 +2084,11 @@ function renderAdminLogin(root) {
         if (ADMIN.user && ADMIN.user.isAdmin) {
           toast('Signed in as ' + ADMIN.user.email);
           await ensureFirebaseSeeded();
-          renderAdminPanel(root);
+          if (ADMIN.renderedPanelUid !== ADMIN.user.uid) {
+            renderAdminPanel(root);
+          }
         } else {
+          ADMIN.renderedPanelUid = null;
           renderAdminLogin(root);
         }
       } catch (err) {
@@ -2126,6 +2133,7 @@ const ADMIN_TABS = [
   { id: 'settings', label: 'Cloud & Security', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>' }
 ];
 function renderAdminPanel(root) {
+  ADMIN.renderedPanelUid = ADMIN.user ? ADMIN.user.uid : 'local';
   const isCloud = App.adapter && App.adapter.name === 'firebase';
   root.innerHTML =
     '<div class="adm-head"><div class="in">' +
@@ -2136,7 +2144,7 @@ function renderAdminPanel(root) {
       '<button class="bt ghost sm" id="adm-out">Logout</button>' +
     '</div></div>' +
     '<div class="adm-wrap"><nav class="adm-nav">' +
-      ADMIN_TABS.map((t) => '<button class="adm-tab' + (ADMIN.tab === t.id ? ' on' : '') + '" data-tab="' + t.id + '"><span class="ic">' + t.icon + '</span>' + t.label + '</button>').join('') +
+      ADMIN_TABS.map((t) => '<button type="button" class="adm-tab' + (ADMIN.tab === t.id ? ' on' : '') + '" data-tab="' + t.id + '" aria-label="' + escAttr(t.label) + '"><span class="ic">' + t.icon + '</span>' + t.label + '</button>').join('') +
     '</nav><main class="adm-main" id="adm-main"></main></div>';
   $('#adm-view').addEventListener('click', goSite);
   $('#adm-out').addEventListener('click', async () => {
@@ -3102,7 +3110,9 @@ window.addEventListener('storage', (e) => {
       const nextUid = userState ? userState.uid : null;
       const nextAdmin = Boolean(userState && userState.isAdmin);
       ADMIN.user = userState;
-      if (App.isAdminRoute && (prevUid !== nextUid || prevAdmin !== nextAdmin)) {
+      if (!App.isAdminRoute) return;
+      if (nextAdmin && ADMIN.renderedPanelUid === nextUid) return;
+      if (prevUid !== nextUid || prevAdmin !== nextAdmin) {
         renderAdmin();
       }
     });
