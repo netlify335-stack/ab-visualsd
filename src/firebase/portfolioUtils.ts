@@ -68,7 +68,49 @@ export interface InquiryInput {
 }
 
 const VALID_ID_RE = /^[a-zA-Z0-9_-]+$/;
-const SITE_DATA_KEYS = ['hero', 'badge', 'nav', 'contact', 'socials', 'services'] as const;
+export const SITE_DATA_KEYS = [
+  'hero',
+  'badge',
+  'nav',
+  'contact',
+  'socials',
+  'services',
+  'seo',
+  'categories',
+  'inquiryTypes',
+  'visuals',
+] as const;
+
+const DEMO_PREVIEW_HOST_RE = /^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i;
+
+export function extractYouTubeId(url: unknown): string | null {
+  if (typeof url !== 'string' || !url.trim()) return null;
+  const trimmed = url.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(
+    /(?:(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i
+  );
+  return match ? match[1] : null;
+}
+
+export function toYouTubeWatchUrl(urlOrId: unknown): string {
+  const id = extractYouTubeId(urlOrId);
+  return id ? `https://www.youtube.com/watch?v=${id}` : '';
+}
+
+export function isDemoPreviewVideoUrl(url: unknown): boolean {
+  return typeof url === 'string' && DEMO_PREVIEW_HOST_RE.test(url.trim());
+}
+
+export function shouldPreferYouTubePreview(project: {
+  preview_video_url?: string;
+  youtube_urls?: string[];
+}): boolean {
+  const hasYt = (project.youtube_urls || []).some((u) => Boolean(extractYouTubeId(u)));
+  if (!hasYt) return false;
+  const prev = String(project.preview_video_url || '').trim();
+  return !prev || isDemoPreviewVideoUrl(prev);
+}
 
 export function truncateStr(val: unknown, maxLen: number): string {
   const s = val == null ? '' : String(val);

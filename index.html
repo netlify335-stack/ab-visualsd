@@ -297,6 +297,15 @@ input,select,textarea{font:inherit}
 .sh-body{padding:0 24px 8px}
 .sh-video{position:relative;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(0,0,0,.4)}
 .sh-video iframe,.sh-video video{position:absolute;inset:0;width:100%;height:100%;border:0}
+.yt-watch-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px;padding:9px 14px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+.yt-watch-meta{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(232,241,236,.68)}
+.yt-watch-btn{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.03em;color:#fff;background:rgba(255,34,34,.18);border:1px solid rgba(255,80,80,.42);border-radius:999px;padding:6px 13px;transition:background .2s ease,transform .2s ease}
+.yt-watch-btn:hover{background:rgba(255,34,34,.32);transform:translateY(-1px)}
+.yt-watch-btn svg{width:15px;height:15px;color:#ff5a5a}
+.yt-case-link{display:none;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.05em;color:#cfeee0;background:rgba(11,47,32,.72);border:1px solid rgba(207,238,224,.35);border-radius:999px;padding:5px 11px;width:fit-content;backdrop-filter:blur(6px);transition:background .2s ease,transform .2s ease}
+.yt-case-link.on{display:inline-flex}
+.yt-case-link:hover{background:rgba(18,74,50,.9);transform:translateY(-1px)}
+.yt-case-link svg{width:13px;height:13px;color:#ff6b6b}
 .episodes{display:flex;gap:10px;overflow-x:auto;padding:12px 2px 4px;scrollbar-width:thin}
 .ep{flex:0 0 auto;width:138px;cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid transparent;background:#000;position:relative;transition:border-color .2s ease,transform .2s ease}
 .ep.on{border-color:var(--mint)}
@@ -621,6 +630,7 @@ select.fi option{background:#0a160d}
       <div class="k" id="ds-key"></div>
       <p id="ds-p"></p>
       <div class="num" id="ds-num"></div>
+      <a class="yt-case-link" id="ds-yt" href="#" target="_blank" rel="noopener"></a>
       <button class="browse" id="ds-all"></button>
     </aside>
   </div>
@@ -690,9 +700,13 @@ const SERVICES_PRESETS = ['Professional Drone Services', 'Wedding Cinematography
 /* ---------- youtube url parsing ---------- */
 function ytId(u) {
   if (!u) return null;
-  const m = String(u).match(/(?:youtube\.com\/(?:watch\?[^#]*v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  const s = String(u).trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/i);
   return m ? m[1] : null;
 }
+const ytWatchUrl = (u) => { const id = ytId(u); return id ? 'https://www.youtube.com/watch?v=' + id : ''; };
+const isDemoPreviewUrl = (u) => /^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i.test(String(u || '').trim());
 const ytThumb = (id) => 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
 const waLink = (phone, text) => 'https://wa.me/' + String(phone || '').replace(/\D/g, '') + (text ? '?text=' + encodeURIComponent(text) : '');
 /* ---------- global app state ---------- */
@@ -1008,7 +1022,20 @@ const DEFAULT_SITE = {
     { title: 'Events & Concerts', desc: 'FPV fly-throughs and crowd-scale coverage for concerts, festivals and live shows.', tag: 'Live Events', icon: 'music' },
     { title: 'Real Estate & Commercial Shoots', desc: 'Architectural drone tours and commercial visuals that sell spaces and stories.', tag: 'Commercial', icon: 'building' },
     { title: 'Cinematic Drone Shots', desc: 'High-speed FPV chases, precision prox flying and signature one-take drone moves.', tag: 'FPV Cinema', icon: 'rocket' }
-  ]
+  ],
+  seo: {
+    title: 'AB VISUALS — Professional Drone Services & Wedding Cinematography',
+    description: 'AB VISUALS — Professional Drone Services, Wedding Cinematography, Pre-Wedding Films, Events & Commercial Aerials across India.'
+  },
+  categories: SERVICES_PRESETS.slice(),
+  inquiryTypes: ['Wedding Cinema', 'Pre-Wedding Shoot', 'Concert / Event', 'Real Estate / Commercial', 'Aerial Videography / Brand Film', 'Drone Pilot Rental'],
+  visuals: {
+    heroPlateUrl: '',
+    heroCutUrl: '',
+    casePlateUrl: '',
+    bgDark: '',
+    accentMint: ''
+  }
 };
 const INQUIRY_TYPES = ['Wedding Cinema', 'Pre-Wedding Shoot', 'Concert / Event', 'Real Estate / Commercial', 'Aerial Videography / Brand Film', 'Drone Pilot Rental'];
 /* ---------- seed projects (pre-seeded until the admin edits them) ---------- */
@@ -1142,7 +1169,8 @@ const LocalAdapter = {
     return { url: dataUrl, w, h };
   },
   async logInquiry(rec) { this._inquiries = this._inquiries || []; this._inquiries.unshift(Object.assign({ id: uid(), created_at: new Date().toISOString() }, rec)); this._inquiries = this._inquiries.slice(0, 200); await idbSet('kv', 'inquiries', this._inquiries); return true; },
-  async getInquiries() { return (this._inquiries || []).slice(0, 50); }
+  async getInquiries() { return (this._inquiries || []).slice(0, 50); },
+  async deleteInquiry(id) { this._inquiries = (this._inquiries || []).filter((x) => x.id !== id); await idbSet('kv', 'inquiries', this._inquiries); }
 };
 /* ---------- Firebase Cloud adapter bridge ---------- */
 function waitForFirebase(timeoutMs) {
@@ -1268,6 +1296,21 @@ function applyCms() {
   const mp = $('#mbd-photo');
   if (c.badge.photoUrl) { mp.style.backgroundImage = 'url("' + c.badge.photoUrl + '")'; mp.style.backgroundSize = 'cover'; mp.style.backgroundPosition = 'center'; }
   else { mp.style.backgroundImage = 'url("' + ASSETS.cut + '")'; mp.style.backgroundSize = '471px 313px'; mp.style.backgroundPosition = '-212px -16px'; }
+  /* SEO meta */
+  if (c.seo && c.seo.title) document.title = c.seo.title;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc && c.seo && c.seo.description) metaDesc.setAttribute('content', c.seo.description);
+  /* Optional admin visual overrides (untouched unless admin sets custom values) */
+  const vis = c.visuals || {};
+  const plateEl = $('#im-plate'), cutEl = $('#im-cut'), caseEl = $('#im-case');
+  if (plateEl) { const target = vis.heroPlateUrl || ASSETS.plate; if (plateEl.getAttribute('src') !== target) plateEl.src = target; }
+  if (cutEl) { const target = vis.heroCutUrl || ASSETS.cut; if (cutEl.getAttribute('src') !== target) cutEl.src = target; }
+  if (caseEl) { const target = vis.casePlateUrl || ASSETS.casePlate; if (caseEl.getAttribute('src') !== target) caseEl.src = target; }
+  const rootStyle = document.documentElement.style;
+  if (vis.bgDark && /^#[0-9a-f]{6}$/i.test(vis.bgDark)) rootStyle.setProperty('--green-900', vis.bgDark);
+  else rootStyle.removeProperty('--green-900');
+  if (vis.accentMint && /^#[0-9a-f]{6}$/i.test(vis.accentMint)) rootStyle.setProperty('--mint', vis.accentMint);
+  else rootStyle.removeProperty('--mint');
   buildSocialBar();
   refreshCaseUI();
 }
@@ -1300,8 +1343,13 @@ function buildKbLayer(p) {
 }
 function mountPreview(p) {
   stopPreview();
+  if (!p) return;
   const m = $('#screen-media');
-  if (p.preview_video_url) {
+  const firstYt = (p.youtube_urls || []).map(ytId).filter(Boolean)[0] || null;
+  const preferYt = Boolean(firstYt && (!p.preview_video_url || isDemoPreviewUrl(p.preview_video_url)));
+  if (preferYt) {
+    m.innerHTML = '<div class="ytwrap"><iframe src="https://www.youtube-nocookie.com/embed/' + firstYt + '?controls=0&mute=1&autoplay=1&loop=1&playlist=' + firstYt + '&modestbranding=1&rel=0&playsinline=1" allow="autoplay; encrypted-media" frameborder="0" title="project preview"></iframe></div>';
+  } else if (p.preview_video_url) {
     /* Ken-Burns gallery underlay: shows through if the browser cannot decode the mp4 */
     m.appendChild(buildKbLayer(p));
     const v = document.createElement('video');
@@ -1310,9 +1358,8 @@ function mountPreview(p) {
     if (p.cover_image_url) v.setAttribute('poster', p.cover_image_url);
     m.appendChild(v);
     const pr = v.play(); if (pr && pr.catch) pr.catch(() => {});
-  } else if ((p.youtube_urls || []).length && ytId(p.youtube_urls[0])) {
-    const id = ytId(p.youtube_urls[0]);
-    m.innerHTML = '<div class="ytwrap"><iframe src="https://www.youtube-nocookie.com/embed/' + id + '?controls=0&mute=1&autoplay=1&loop=1&playlist=' + id + '&modestbranding=1&rel=0&playsinline=1" allow="autoplay; encrypted-media" frameborder="0" title="project preview"></iframe></div>';
+  } else if (firstYt) {
+    m.innerHTML = '<div class="ytwrap"><iframe src="https://www.youtube-nocookie.com/embed/' + firstYt + '?controls=0&mute=1&autoplay=1&loop=1&playlist=' + firstYt + '&modestbranding=1&rel=0&playsinline=1" allow="autoplay; encrypted-media" frameborder="0" title="project preview"></iframe></div>';
   } else if ((p.gallery_images || []).length) {
     m.appendChild(buildKbLayer(p));
   }
@@ -1329,8 +1376,21 @@ function refreshCaseUI() {
   $('#ds-key').textContent = p.short_key || '';
   $('#ds-p').textContent = p.short_desc || '';
   $('#ds-num').textContent = String(App.idx + 1).padStart(2, '0') + ' / ' + String(App.projects.length).padStart(2, '0');
+  const firstYt = (p.youtube_urls || []).map(ytId).filter(Boolean)[0] || null;
+  const dsYt = $('#ds-yt');
+  if (dsYt) {
+    if (firstYt) {
+      dsYt.href = ytWatchUrl(firstYt);
+      dsYt.innerHTML = SOCIAL_ICONS.youtube + '<span>See full video on YouTube \u2197</span>';
+      dsYt.classList.add('on');
+    } else {
+      dsYt.classList.remove('on');
+      dsYt.href = '#';
+      dsYt.innerHTML = '';
+    }
+  }
   const photos = (p.gallery_images || []).length;
-  const hasVid = (p.youtube_urls || []).length > 0 || !!p.preview_video_url;
+  const hasVid = Boolean(firstYt) || !!p.preview_video_url;
   $('#cue-txt').textContent = (App.cms.nav.hoverCue || 'Open Full Project') + ' \u2022 ' + photos + ' Photos' + (hasVid ? ' \u2022 Video' : '');
 }
 /* ---------- transitions (brief §9) ---------- */
@@ -1601,8 +1661,12 @@ function showcaseStageHTML(p) {
   const yts = (p.youtube_urls || []).map(ytId).filter(Boolean);
   if (yts.length) {
     return '<div class="sh-video" id="sh-stage"><iframe src="https://www.youtube-nocookie.com/embed/' + yts[0] + '?rel=0&modestbranding=1&playsinline=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen title="project film"></iframe></div>' +
+      '<div class="yt-watch-bar">' +
+        '<span class="yt-watch-meta">' + (yts.length > 1 ? 'Video 1 of ' + yts.length + ' \u2022 YouTube HD' : 'YouTube HD Film') + '</span>' +
+        '<a class="yt-watch-btn" id="sh-yt-link" href="' + escAttr(ytWatchUrl(yts[0])) + '" target="_blank" rel="noopener">' + SOCIAL_ICONS.youtube + '<span>See full video on YouTube \u2197</span></a>' +
+      '</div>' +
       (yts.length > 1 ? '<div class="episodes">' + yts.map((id, j) =>
-        '<div class="ep' + (j === 0 ? ' on' : '') + '" data-yt="' + id + '"><span class="epn">' + (j + 1) + '</span><img src="' + ytThumb(id) + '" alt="" loading="lazy"><span class="pl">\u25B6</span></div>').join('') + '</div>' : '');
+        '<div class="ep' + (j === 0 ? ' on' : '') + '" data-yt="' + id + '" data-idx="' + j + '"><span class="epn">' + (j + 1) + '</span><img src="' + ytThumb(id) + '" alt="" loading="lazy"><span class="pl">\u25B6</span></div>').join('') + '</div>' : '');
   }
   if (p.preview_video_url) {
     return '<div class="sh-video"><video src="' + escAttr(p.preview_video_url) + '" controls playsinline preload="metadata"' + (p.cover_image_url ? ' poster="' + escAttr(p.cover_image_url) + '"' : '') + '></video></div>';
@@ -1652,7 +1716,13 @@ function openShowcase(idx) {
   $$('.ep', root).forEach((epBtn) => epBtn.addEventListener('click', () => {
     const stage = $('#sh-stage', root);
     if (!stage) return;
-    stage.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + epBtn.dataset.yt + '?rel=0&modestbranding=1&playsinline=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen title="project film"></iframe>';
+    const vid = epBtn.dataset.yt;
+    const epIdx = (+epBtn.dataset.idx || 0) + 1;
+    stage.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + vid + '?rel=0&modestbranding=1&playsinline=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen title="project film"></iframe>';
+    const ytLink = $('#sh-yt-link', root);
+    if (ytLink) ytLink.href = ytWatchUrl(vid);
+    const metaEl = $('.yt-watch-meta', root);
+    if (metaEl && yts.length > 1) metaEl.textContent = 'Video ' + epIdx + ' of ' + yts.length + ' \u2022 YouTube HD';
     $$('.ep', root).forEach((e2) => e2.classList.toggle('on', e2 === epBtn));
   }));
   const nc = $('#sh-next', root);
@@ -1666,8 +1736,14 @@ function buildSocialLinksHTML() {
   return out.join('');
 }
 /* ---------- all-projects filterable grid drawer ---------- */
+function getActiveCategories() {
+  const base = (App.cms && Array.isArray(App.cms.categories) && App.cms.categories.length) ? App.cms.categories : SERVICES_PRESETS;
+  const set = new Set(base.filter(Boolean));
+  (App.projects || []).forEach((p) => { if (p && p.is_published !== false && p.category) set.add(p.category); });
+  return Array.from(set);
+}
 function openAllProjects() {
-  const cats = ['All'].concat(SERVICES_PRESETS);
+  const cats = ['All'].concat(getActiveCategories());
   const root = openModal(
     '<section class="sheet ap-sheet">' +
       '<header class="sh-head" style="padding-bottom:4px"><div class="lft"><h2 class="sh-title">' + esc(App.cms.nav.allHeading || 'ALL PROJECTS') + '</h2>' +
@@ -1698,11 +1774,12 @@ function openAllProjects() {
 /* ---------- services & contact drawer / booking (brief §11) ---------- */
 function inquiryFormHTML() {
   const c = App.cms.contact;
+  const types = (App.cms && Array.isArray(App.cms.inquiryTypes) && App.cms.inquiryTypes.length) ? App.cms.inquiryTypes : INQUIRY_TYPES;
   return '<form class="inq" id="inq-form">' +
     '<h3>Instant Shoot Inquiry</h3><div class="grid">' +
     '<div><label class="lb2">Your Name</label><input class="fi" name="name" required placeholder="e.g. Rahul Sharma"></div>' +
     '<div><label class="lb2">Phone / WhatsApp</label><input class="fi" name="phone" inputmode="tel" placeholder="+91 ..."></div>' +
-    '<div><label class="lb2">Shoot Type</label><select class="fi" name="shoot_type">' + INQUIRY_TYPES.map((t) => '<option>' + esc(t) + '</option>').join('') + '</select></div>' +
+    '<div><label class="lb2">Shoot Type</label><select class="fi" name="shoot_type">' + types.map((t) => '<option>' + esc(t) + '</option>').join('') + '</select></div>' +
     '<div><label class="lb2">Shoot Date</label><input class="fi" type="date" name="shoot_date"></div>' +
     '<div><label class="lb2">City / Location</label><input class="fi" name="shoot_location" placeholder="e.g. Udaipur, Rajasthan"></div>' +
     '<div class="full"><label class="lb2">Message</label><textarea class="fi" name="message" placeholder="Tell us about your shoot \u2014 venue, days, what you have in mind..."></textarea></div>' +
@@ -1832,6 +1909,8 @@ function renderAdminLogin(root) {
   const isFirebase = App.adapter && App.adapter.name === 'firebase';
   const adminEmail = window.__ABV_ADMIN_EMAIL__ || '';
   const wrongAccount = isFirebase && ADMIN.user && !ADMIN.user.isAdmin;
+  const projectId = (isFirebase && App.adapter.config && App.adapter.config.projectId) || 'rudranil-backup';
+  const authDomainsUrl = 'https://console.firebase.google.com/project/' + encodeURIComponent(projectId) + '/authentication/settings';
   root.innerHTML = '<div class="adm-login"><div class="box">' +
     '<div class="lgo">AB</div><h1>AB VISUALS Studio Admin</h1>' +
     '<div class="sub2">Control panel \u2014 projects, media, contacts &amp; site text</div>' +
@@ -1840,6 +1919,7 @@ function renderAdminLogin(root) {
           ? '<div class="hintp" style="margin-bottom:14px;border-color:rgba(255,156,156,.45);color:#ffc2c2">Signed in as <b>' + esc(ADMIN.user.email) + '</b>.<br>This Google account is not authorized as Studio Admin' + (adminEmail ? ' (use <b>' + esc(adminEmail) + '</b>)' : '') + '.</div>' +
             '<div class="bt-row" style="justify-content:center;margin-top:14px"><button class="bt" id="adm-google-go">Switch Google Account</button><button class="bt ghost" id="adm-google-out">Sign Out</button></div>'
           : '<div class="bt-row" style="justify-content:center;margin-top:18px"><button class="bt" id="adm-google-go" style="width:100%">Sign in with Google (Admin)</button></div>' +
+            '<div id="adm-auth-err"></div>' +
             '<div class="hintp">Connected to <b>Firebase Cloud</b>.<br>Sign in with your authorized studio Google account to add, edit, or delete portfolio items live for all visitors.</div>')
       : '<input class="fi" id="pw" type="password" placeholder="Passcode" style="letter-spacing:.2em;text-align:center">' +
         '<div class="bt-row" style="justify-content:center;margin-top:14px"><button class="bt" id="pw-go">Unlock Panel</button></div>' +
@@ -1853,6 +1933,8 @@ function renderAdminLogin(root) {
       btn.disabled = true;
       const oldTxt = btn.textContent;
       btn.textContent = 'Signing in\u2026';
+      const errBox = $('#adm-auth-err');
+      if (errBox) errBox.innerHTML = '';
       try {
         ADMIN.user = await App.adapter.signInAdmin();
         if (ADMIN.user && ADMIN.user.isAdmin) {
@@ -1863,7 +1945,16 @@ function renderAdminLogin(root) {
           renderAdminLogin(root);
         }
       } catch (err) {
-        toast('Sign-in failed: ' + (err && err.message ? err.message : 'Cancelled'));
+        const code = (err && err.code) || '';
+        const msg = (err && err.message) || 'Cancelled';
+        if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+          if (errBox) {
+            errBox.innerHTML = '<div class="hintp" style="margin-top:12px;border-color:rgba(255,156,156,.5);color:#ffd0d0;text-align:left"><b>Domain not authorized in Firebase Auth:</b><br>Add <code>' + esc(location.hostname) + '</code> under Firebase Console \u2192 Authentication \u2192 Settings \u2192 Authorized domains.<br><a href="' + escAttr(authDomainsUrl) + '" target="_blank" rel="noopener" style="color:#cfeee0;text-decoration:underline;display:inline-block;margin-top:6px">Open Firebase Authorized Domains \u2197</a></div>';
+          }
+          toast('Add ' + location.hostname + ' to Firebase Authorized Domains');
+        } else {
+          toast('Sign-in failed: ' + msg);
+        }
         btn.disabled = false;
         btn.textContent = oldTxt;
       }
@@ -1962,8 +2053,11 @@ function renderProjectList() {
   if (!shown.length) { box.innerHTML = '<div style="color:rgba(232,241,236,.6);font-size:13px">No project matches this search.</div>'; return; }
   box.innerHTML = shown.map(({ p, i }) =>
     '<div class="proj-row"><img src="' + escAttr(p.cover_image_url || (p.gallery_images[0] || {}).url || '') + '" alt="">' +
-    '<div class="pi"><div class="t">' + esc(p.title || 'Untitled') + (p.is_published === false ? ' <span style="color:#ffb37a;font-size:10px">\u2022 DRAFT</span>' : '') + '</div>' +
-    '<div class="m">' + esc([p.category, (p.gallery_images || []).length + ' photos', (p.youtube_urls || []).length + ' videos'].filter(Boolean).join(' \u2022 ')) + '</div></div>' +
+    '<div class="pi"><div class="t">' + esc(p.title || 'Untitled') +
+      (p.is_published === false
+        ? ' <span style="color:#ffb37a;font-size:10px;letter-spacing:.08em">\u2022 DRAFT (HIDDEN)</span>'
+        : ' <span style="color:#7be0af;font-size:10px;letter-spacing:.08em">\u2022 LIVE</span>') + '</div>' +
+    '<div class="m">' + esc([p.category, (p.gallery_images || []).length + ' photos', (p.youtube_urls || []).filter((u) => ytId(u)).length + ' YouTube videos'].filter(Boolean).join(' \u2022 ')) + '</div></div>' +
     '<div class="acts">' +
       '<button class="ib" data-act="up" data-i="' + i + '" title="Move up">\u2191</button>' +
       '<button class="ib" data-act="down" data-i="' + i + '" title="Move down">\u2193</button>' +
@@ -2036,11 +2130,13 @@ async function reloadPublished() {
 /* ---------- project editor ---------- */
 function newProjectDefaults() {
   const y = String(new Date().getFullYear());
+  const cats = getActiveCategories();
+  const defCat = cats[0] || SERVICES_PRESETS[0];
   return {
-    id: uid(), title: 'NEW PROJECT', slug: '', category: SERVICES_PRESETS[0], location: '', year: y,
-    ticket_rows: [SERVICES_PRESETS[0].toUpperCase(), '', y], short_key: '// new project', short_desc: '\u2014 one-line teaser for the laptop view.',
+    id: uid(), title: 'NEW PROJECT', slug: '', category: defCat, location: '', year: y,
+    ticket_rows: [defCat.toUpperCase(), '', y], short_key: '// new project', short_desc: '\u2014 one-line teaser for the laptop view.',
     full_description: '', youtube_urls: [], preview_video_url: '', cover_image_url: '', gallery_images: [],
-    sort_order: ADMIN.list.length, is_published: true, created_at: new Date().toISOString()
+    sort_order: 0, is_published: true, created_at: new Date().toISOString(), __isNew: true
   };
 }
 function openProjectEditor(p) {
@@ -2049,10 +2145,17 @@ function openProjectEditor(p) {
   const ed = $('#proj-editor');
   if (!ed) return;
   const trs = (e.ticket_rows && e.ticket_rows.length ? e.ticket_rows : [e.category || '', e.location || '', e.year || '']);
-  const catOpts = SERVICES_PRESETS.map((c) => '<option' + (c === e.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
-  const isCustom = e.category && !SERVICES_PRESETS.includes(e.category);
-  ed.innerHTML = '<div class="card"><h3>' + (p ? 'Edit Project' : 'Create New Project') + '</h3><div class="hintx">Title &amp; metadata drive the laptop ticket card; the description appears in the full-screen showcase.</div>' +
-    '<label class="lb2">Project Title (ticket + showcase heading)</label><input class="fi" id="ed-title" value="' + escAttr(e.title || '') + '" placeholder="e.g. UDAIPUR ROYAL WEDDING">' +
+  const cats = getActiveCategories();
+  const catOpts = cats.map((c) => '<option' + (c === e.category ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  const isCustom = e.category && !cats.includes(e.category);
+  const isDemoPrev = isDemoPreviewUrl(e.preview_video_url);
+  ed.innerHTML = '<div class="card"><h3>' + (p ? 'Edit Project' : 'Create New Project') + '</h3><div class="hintx">Title &amp; metadata drive the laptop ticket card; photos &amp; YouTube videos sync live via Firebase for every visitor.</div>' +
+    '<div class="row2"><div><label class="lb2">Project Title (ticket + showcase heading)</label><input class="fi" id="ed-title" value="' + escAttr(e.title || '') + '" placeholder="e.g. UDAIPUR ROYAL WEDDING"></div>' +
+    '<div><label class="lb2">Visibility &amp; Placement</label><div class="bt-row" style="margin-top:4px">' +
+      '<button class="sw' + (e.is_published !== false ? ' on' : '') + '" id="ed-pub" type="button" title="Toggle Published / Draft"><i></i></button>' +
+      '<span id="ed-pub-lbl" style="font-size:12.5px;font-weight:700;color:' + (e.is_published !== false ? '#7be0af' : '#ffb37a') + '">' + (e.is_published !== false ? 'Published (Live for all visitors)' : 'Draft (Hidden from visitors)') + '</span>' +
+      (!p ? '<select class="fi" id="ed-pos" style="width:auto;padding:6px 10px;font-size:12px"><option value="first" selected>Show First (#1)</option><option value="end">Add to End</option></select>' : '') +
+    '</div></div></div>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Service Category</label><select class="fi" id="ed-cat">' + catOpts + '<option value="__custom"' + (isCustom ? ' selected' : '') + '>Custom\u2026</option></select></div>' +
     '<div><label class="lb2">Custom Category</label><input class="fi" id="ed-cat-custom" value="' + escAttr(isCustom ? e.category : '') + '" placeholder="type a custom category"></div></div>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Location</label><input class="fi" id="ed-loc" value="' + escAttr(e.location || '') + '" placeholder="e.g. Mumbai, India"></div>' +
@@ -2062,20 +2165,24 @@ function openProjectEditor(p) {
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Laptop Short Key</label><input class="fi" id="ed-key" value="' + escAttr(e.short_key || '') + '" placeholder="// royal wedding"></div>' +
     '<div><label class="lb2">Short Summary (laptop left block)</label><input class="fi" id="ed-short" value="' + escAttr(e.short_desc || '') + '"></div></div>' +
     '<label class="lb2" style="margin-top:12px">Full Project Story (full-screen showcase)</label><textarea class="fi" id="ed-full" placeholder="The story of this shoot...">' + esc(e.full_description || '') + '</textarea>' +
-    '<label class="lb2" style="margin-top:12px">Direct MP4 Preview URL (optional \u2014 muted laptop preview loop)</label><input class="fi" id="ed-prev" value="' + escAttr(e.preview_video_url || '') + '" placeholder="https://.../preview.mp4">' +
+    '<label class="lb2" style="margin-top:12px">Direct MP4 Preview URL (optional \u2014 leave blank to play your YouTube video on the laptop)</label>' +
+    '<div class="bt-row"><input class="fi" id="ed-prev" value="' + escAttr(e.preview_video_url || '') + '" placeholder="https://.../preview.mp4 (optional)" style="flex:1">' +
+    (e.preview_video_url ? '<button class="bt ghost sm" id="ed-prev-clear" type="button">' + (isDemoPrev ? 'Clear Demo MP4' : 'Clear MP4') + '</button>' : '') + '</div>' +
     youtubeManagerHTML(e) +
-    '<div class="card" style="margin:16px 0 0;background:rgba(255,255,255,.03)"><h3 style="margin-bottom:2px">Project Photos \u2014 unlimited uploads</h3><div class="hintx">Select 10, 30, 50+ photos at once from your phone or computer gallery. Large DSLR/drone images are auto-optimized to crisp WebP (max 2048px) with per-file progress. First photo can be set as cover.</div>' +
-    uploaderHTML() + '<div id="ed-uplist" class="uplist"></div><div id="ed-gal" class="ph-grid"></div></div>' +
-    '<div class="bt-row" style="margin-top:16px"><button class="bt" id="ed-save">Save Project</button><button class="bt ghost" id="ed-cancel">Cancel</button>' +
-    '<span style="font-size:11.5px;color:rgba(232,241,236,.55)">Saved ' + (e.gallery_images || []).length + ' photo(s) on this project</span></div></div>';
+    '<div class="card" style="margin:16px 0 0;background:rgba(255,255,255,.03)"><h3 style="margin-bottom:2px">Project Photos \u2014 unlimited uploads</h3><div class="hintx">Select photos from your phone or computer gallery, or paste a direct image URL below. Uploaded photos are optimized to WebP and synced live via Firebase.</div>' +
+    uploaderHTML() +
+    '<div class="bt-row" style="margin-top:10px"><input class="fi" id="ed-img-url" placeholder="Or paste a direct image URL (https://...) + Add" style="flex:1;min-width:200px"><button class="bt ghost sm" id="ed-img-add" type="button">+ Add Photo URL</button></div>' +
+    '<div id="ed-uplist" class="uplist"></div><div id="ed-gal" class="ph-grid"></div></div>' +
+    '<div class="bt-row" style="margin-top:16px"><button class="bt" id="ed-save">Save Project Live</button><button class="bt ghost" id="ed-cancel">Cancel</button>' +
+    '<span id="ed-photo-cnt" style="font-size:11.5px;color:rgba(232,241,236,.55)">Saved ' + (e.gallery_images || []).length + ' photo(s) on this project</span></div></div>';
   bindEditor();
   renderEditorGallery();
+  ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function youtubeManagerHTML(e) {
-  const rows = (e.youtube_urls || []).map((u, j) =>
-    '<div class="yt-row"><input class="fi ed-yt-url" data-j="' + j + '" value="' + escAttr(u) + '" placeholder="https://www.youtube.com/watch?v=..."><button class="ib del ed-yt-del" data-j="' + j + '" title="Remove">\u2715</button></div>').join('');
-  return '<div class="card" style="margin:16px 0 0;background:rgba(255,255,255,.03)"><h3 style="margin-bottom:2px">YouTube Videos</h3><div class="hintx">Paste any YouTube link format \u2014 watch?v=, youtu.be/, shorts/ \u2014 and add as many videos as the project needs. The live preview below plays exactly what visitors will see.</div>' +
-    rows + '<div class="bt-row" style="margin-top:8px"><input class="fi" id="ed-yt-in" placeholder="Paste another YouTube link + Add" style="flex:1;min-width:200px"><button class="bt ghost sm" id="ed-yt-add">+ Add YouTube Video</button></div>' +
+  return '<div class="card" style="margin:16px 0 0;background:rgba(255,255,255,.03)"><h3 style="margin-bottom:2px">YouTube Videos</h3><div class="hintx">Paste any YouTube link (watch?v=, youtu.be/, shorts/, live/). Visitors will see the embedded video AND a compact <b>"See full video on YouTube"</b> button.</div>' +
+    '<div id="ed-yt-rows"></div>' +
+    '<div class="bt-row" style="margin-top:8px"><input class="fi" id="ed-yt-in" placeholder="Paste YouTube link + Add" style="flex:1;min-width:200px"><button class="bt ghost sm" id="ed-yt-add" type="button">+ Add YouTube Video</button></div>' +
     '<div class="yt-prev" id="ed-yt-prev"><div class="none">Live YouTube preview appears here</div></div></div>';
 }
 function uploaderHTML() {
@@ -2085,6 +2192,23 @@ function bindEditor() {
   const e = ADMIN.editing;
   $('#ed-save').addEventListener('click', saveProjectEditor);
   $('#ed-cancel').addEventListener('click', () => { ADMIN.editing = null; $('#proj-editor').innerHTML = ''; });
+  const pubBtn = $('#ed-pub');
+  if (pubBtn) pubBtn.addEventListener('click', () => {
+    pubBtn.classList.toggle('on');
+    e.is_published = pubBtn.classList.contains('on');
+    const lbl = $('#ed-pub-lbl');
+    if (lbl) {
+      lbl.textContent = e.is_published ? 'Published (Live for all visitors)' : 'Draft (Hidden from visitors)';
+      lbl.style.color = e.is_published ? '#7be0af' : '#ffb37a';
+    }
+  });
+  const clearPrevBtn = $('#ed-prev-clear');
+  if (clearPrevBtn) clearPrevBtn.addEventListener('click', () => {
+    const inp = $('#ed-prev');
+    if (inp) inp.value = '';
+    clearPrevBtn.remove();
+    toast('MP4 cleared \u2014 laptop will show your YouTube video or photo gallery');
+  });
   const catSel = $('#ed-cat');
   const syncTr = () => {
     const c = catSel.value === '__custom' ? ($('#ed-cat-custom').value || '') : catSel.value;
@@ -2097,25 +2221,61 @@ function bindEditor() {
   ['#ed-tr0', '#ed-tr1', '#ed-tr2'].forEach((id2) => { const el2 = $(id2); if (el2) el2.addEventListener('input', () => { el2.dataset.touched = '1'; }); });
   /* youtube */
   const renderYtRows = () => {
-    const card = $('#ed-yt-in').closest('.card');
-    $$('.yt-row', card).forEach((r) => r.remove());
-    const inWrap = $('#ed-yt-in').parentElement;
-    (e.youtube_urls || []).forEach((u, j) => {
-      const row = elFromHTML('<div class="yt-row"><input class="fi ed-yt-url" data-j="' + j + '" value="' + escAttr(u) + '" placeholder="https://www.youtube.com/watch?v=..."><button class="ib del ed-yt-del" data-j="' + j + '" title="Remove">\u2715</button></div>');
-      inWrap.parentElement.insertBefore(row, inWrap.parentElement.firstElementChild === null ? inWrap : $('#ed-yt-in').closest('.bt-row'));
-      row.querySelector('.ed-yt-url').addEventListener('change', (ev) => { e.youtube_urls[+row.querySelector('.ed-yt-url').dataset.j] = ev.target.value.trim(); edYtPreview(); });
-      row.querySelector('.ed-yt-del').addEventListener('click', () => { e.youtube_urls.splice(+row.querySelector('.ed-yt-del').dataset.j, 1); renderYtRows(); });
+    const host = $('#ed-yt-rows');
+    if (!host) return;
+    host.innerHTML = (e.youtube_urls || []).map((u, j) => {
+      const watch = ytWatchUrl(u);
+      return '<div class="yt-row">' +
+        '<input class="fi ed-yt-url" data-j="' + j + '" value="' + escAttr(u) + '" placeholder="https://www.youtube.com/watch?v=...">' +
+        (watch ? '<a class="ib" href="' + escAttr(watch) + '" target="_blank" rel="noopener" title="Open on YouTube">\u2197</a>' : '') +
+        '<button class="ib ed-yt-up" data-j="' + j + '" type="button" title="Move up">\u2191</button>' +
+        '<button class="ib ed-yt-dn" data-j="' + j + '" type="button" title="Move down">\u2193</button>' +
+        '<button class="ib del ed-yt-del" data-j="' + j + '" type="button" title="Remove">\u2715</button></div>';
+    }).join('');
+    $$('.ed-yt-url', host).forEach((inp) => {
+      const sync = () => { e.youtube_urls[+inp.dataset.j] = inp.value.trim(); edYtPreview(); };
+      inp.addEventListener('input', sync);
+      inp.addEventListener('change', sync);
     });
+    $$('.ed-yt-up', host).forEach((b) => b.addEventListener('click', () => {
+      const j = +b.dataset.j;
+      if (j > 0) { const t = e.youtube_urls[j - 1]; e.youtube_urls[j - 1] = e.youtube_urls[j]; e.youtube_urls[j] = t; renderYtRows(); }
+    }));
+    $$('.ed-yt-dn', host).forEach((b) => b.addEventListener('click', () => {
+      const j = +b.dataset.j;
+      if (j < e.youtube_urls.length - 1) { const t = e.youtube_urls[j + 1]; e.youtube_urls[j + 1] = e.youtube_urls[j]; e.youtube_urls[j] = t; renderYtRows(); }
+    }));
+    $$('.ed-yt-del', host).forEach((b) => b.addEventListener('click', () => {
+      e.youtube_urls.splice(+b.dataset.j, 1);
+      renderYtRows();
+    }));
     edYtPreview();
   };
   $('#ed-yt-add').addEventListener('click', () => {
     const v = $('#ed-yt-in').value.trim();
-    if (!ytId(v)) { toast('That does not look like a YouTube link'); return; }
-    e.youtube_urls.push(v); $('#ed-yt-in').value = ''; renderYtRows();
+    if (!ytId(v)) { toast('That does not look like a valid YouTube link'); return; }
+    e.youtube_urls = e.youtube_urls || [];
+    e.youtube_urls.push(v);
+    $('#ed-yt-in').value = '';
+    renderYtRows();
   });
   $('#ed-yt-in').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); $('#ed-yt-add').click(); } });
   $('#ed-yt-in').addEventListener('input', edYtPreview);
   renderYtRows();
+  /* direct image URL adder */
+  const imgAddBtn = $('#ed-img-add');
+  if (imgAddBtn) imgAddBtn.addEventListener('click', () => {
+    const url = ($('#ed-img-url').value || '').trim();
+    if (!/^https?:\/\//i.test(url)) { toast('Paste a valid https:// image URL'); return; }
+    e.gallery_images = e.gallery_images || [];
+    e.gallery_images.push({ id: uid(), url, caption: '', w: 0, h: 0 });
+    if (!e.cover_image_url) e.cover_image_url = url;
+    $('#ed-img-url').value = '';
+    renderEditorGallery();
+    const cnt = $('#ed-photo-cnt');
+    if (cnt) cnt.textContent = 'Saved ' + e.gallery_images.length + ' photo(s) on this project';
+    toast('Photo URL added');
+  });
   /* uploads */
   const drop = $('#ed-drop'), file = $('#ed-file');
   drop.addEventListener('click', () => file.click());
@@ -2129,7 +2289,9 @@ function edYtPreview() {
   if (!box) return;
   const typed = $('#ed-yt-in') ? $('#ed-yt-in').value.trim() : '';
   const id = ytId(typed) || ytId((ADMIN.editing.youtube_urls || [])[0] || '');
-  box.innerHTML = id ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1&playsinline=1" allowfullscreen title="preview"></iframe>' : '<div class="none">Live YouTube preview appears here</div>';
+  box.innerHTML = id
+    ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1&playsinline=1" allowfullscreen title="preview"></iframe>'
+    : '<div class="none">Live YouTube preview appears here</div>';
 }
 async function handleEditorFiles(files) {
   const list = Array.from(files || []);
@@ -2150,7 +2312,7 @@ async function handleEditorFiles(files) {
       toast('Upload failed: ' + err.message);
     }
   }
-  const cnt = $('#ed-save').parentElement.querySelector('span');
+  const cnt = $('#ed-photo-cnt');
   if (cnt) cnt.textContent = 'Saved ' + ADMIN.editing.gallery_images.length + ' photo(s) on this project';
 }
 function renderEditorGallery() {
@@ -2176,14 +2338,23 @@ function renderEditorGallery() {
     else if (a === 'del') { if (e.cover_image_url === arr[j].url) e.cover_image_url = ''; arr.splice(j, 1); }
     renderEditorGallery();
   }));
-  $$('input[data-a="cap"]', grid).forEach((inp) => inp.addEventListener('change', () => { e.gallery_images[+inp.dataset.j].caption = inp.value; }));
+  $$('input[data-a="cap"]', grid).forEach((inp) => {
+    const sync = () => { e.gallery_images[+inp.dataset.j].caption = inp.value; };
+    inp.addEventListener('input', sync);
+    inp.addEventListener('change', sync);
+  });
 }
 async function saveProjectEditor() {
   const e = ADMIN.editing;
   if (!e) { toast('Nothing to save'); return; }
   const gv = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const gr = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const saveBtn = $('#ed-save');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; }
   try {
+    const isNew = Boolean(e.__isNew);
+    const placeFirst = isNew && $('#ed-pos') && $('#ed-pos').value === 'first';
+    delete e.__isNew;
     e.title = gv('ed-title') || 'UNTITLED PROJECT';
     e.slug = slugify(e.title);
     e.category = $('#ed-cat').value === '__custom' ? (gv('ed-cat-custom') || SERVICES_PRESETS[0]) : $('#ed-cat').value;
@@ -2194,24 +2365,38 @@ async function saveProjectEditor() {
     e.short_desc = gv('ed-short');
     e.full_description = gr('ed-full');
     e.preview_video_url = gv('ed-prev');
+    e.is_published = $('#ed-pub') ? $('#ed-pub').classList.contains('on') : (e.is_published !== false);
     const pendingYt = gv('ed-yt-in');
     if (pendingYt && ytId(pendingYt) && !(e.youtube_urls || []).includes(pendingYt)) {
       e.youtube_urls = (e.youtube_urls || []).concat([pendingYt]);
     }
+    e.youtube_urls = (e.youtube_urls || []).map((u) => String(u || '').trim()).filter(Boolean);
+    if (isNew) {
+      e.sort_order = placeFirst ? 0 : ADMIN.list.length;
+    }
     await App.adapter.saveProject(e);
+    if (placeFirst && ADMIN.list.length > 0) {
+      const updatedOrder = [e].concat(ADMIN.list.filter((x) => x.id !== e.id));
+      updatedOrder.forEach((pp, k) => { pp.sort_order = k; });
+      await App.adapter.reorderProjects(updatedOrder);
+    }
     toast('Project saved' + (App.adapter.name === 'firebase' ? ' to Firebase \u2014 live for all visitors' : ' on this device'));
     ADMIN.editing = null;
     const pe = $('#proj-editor');
     if (pe) pe.innerHTML = '';
     await reloadAdminList(); renderStats(); renderProjectList(); await reloadPublished();
-  } catch (err) { toast('Save failed: ' + err.message); }
+  } catch (err) {
+    toast('Save failed: ' + err.message);
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Project Live'; }
+  }
 }
 /* ---------- tab 2: contact & socials ---------- */
 function renderContactTab(main) {
   const c = App.cms.contact, s = App.cms.socials;
+  const inqTypes = (Array.isArray(App.cms.inquiryTypes) && App.cms.inquiryTypes.length ? App.cms.inquiryTypes : INQUIRY_TYPES).join('\n');
   const sw = (id2, on) => '<button class="sw' + (on ? ' on' : '') + '" id="' + id2 + '" type="button"><i></i></button>';
   main.innerHTML =
-    '<div class="card"><h3>Global Contact Manager</h3><div class="hintx">Saving here instantly updates the lanyard ID badge, the booking modals, the WhatsApp buttons and the bottom social bar across the whole website.</div>' +
+    '<div class="card"><h3>Global Contact Manager</h3><div class="hintx">Saving here instantly updates the lanyard ID badge, the booking modals, the WhatsApp buttons and the bottom social bar live for all visitors.</div>' +
     '<div class="row2"><div><label class="lb2">Brand / Pilot Name</label><input class="fi" id="ct-brand" value="' + escAttr(c.brand) + '"></div>' +
     '<div><label class="lb2">Phone Number</label><input class="fi" id="ct-phone" value="' + escAttr(c.phone) + '"></div></div>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">WhatsApp Number (with country code)</label><input class="fi" id="ct-wa" value="' + escAttr(c.whatsapp) + '" placeholder="91XXXXXXXXXX"></div>' +
@@ -2219,19 +2404,20 @@ function renderContactTab(main) {
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Email Address</label><input class="fi" id="ct-email" value="' + escAttr(c.email) + '"></div>' +
     '<div><label class="lb2">Studio City / Address</label><input class="fi" id="ct-city" value="' + escAttr(c.city) + '"></div></div>' +
     '<label class="lb2" style="margin-top:10px">Availability Note</label><input class="fi" id="ct-avail" value="' + escAttr(c.availability || '') + '"></div>' +
-    '<div class="card"><h3>Bottom Social Bar ("sabse niche")</h3><div class="hintx">These are the Instagram / YouTube / WhatsApp links pinned at the very bottom of the hero.</div>' +
+    '<div class="card"><h3>Bottom Social Bar ("sabse niche")</h3><div class="hintx">These are the Instagram / YouTube / WhatsApp links pinned at the very bottom of the hero and inside every project showcase.</div>' +
     '<div class="tgl-row">' + sw('sw-insta', s.instagramShow !== false) + '<div class="nm">Instagram<small>link: <input class="fi" id="so-insta-url" value="' + escAttr(s.instagramUrl) + '" style="max-width:270px;display:inline-block;padding:5px 8px;font-size:12px"> \u2022 label: <input class="fi" id="so-insta-lb" value="' + escAttr(s.instagramLabel) + '" style="max-width:130px;display:inline-block;padding:5px 8px;font-size:12px"></small></div></div>' +
     '<div class="tgl-row">' + sw('sw-yt', s.youtubeShow !== false) + '<div class="nm">YouTube<small>link: <input class="fi" id="so-yt-url" value="' + escAttr(s.youtubeUrl) + '" style="max-width:270px;display:inline-block;padding:5px 8px;font-size:12px"> \u2022 label: <input class="fi" id="so-yt-lb" value="' + escAttr(s.youtubeLabel) + '" style="max-width:130px;display:inline-block;padding:5px 8px;font-size:12px"></small></div></div>' +
     '<div class="tgl-row">' + sw('sw-wa', s.whatsappShow !== false) + '<div class="nm">WhatsApp<small>direct link (blank = auto from number): <input class="fi" id="so-wa-url" value="' + escAttr(s.whatsappUrl) + '" style="max-width:270px;display:inline-block;padding:5px 8px;font-size:12px"> \u2022 label: <input class="fi" id="so-wa-lb" value="' + escAttr(s.whatsappLabel) + '" style="max-width:130px;display:inline-block;padding:5px 8px;font-size:12px"></small></div></div></div>' +
-    '<div class="card"><h3>Drawer Headings &amp; Buttons</h3>' +
+    '<div class="card"><h3>Drawer Headings, Buttons &amp; Shoot Types</h3>' +
     '<div class="row2"><div><label class="lb2">Services Drawer Heading</label><input class="fi" id="ct-dh" value="' + escAttr(c.drawerHeading) + '"></div>' +
     '<div><label class="lb2">Services Drawer Subtitle</label><input class="fi" id="ct-ds" value="' + escAttr(c.drawerSub) + '"></div></div>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Booking Heading</label><input class="fi" id="ct-bh" value="' + escAttr(c.bookHeading) + '"></div>' +
     '<div><label class="lb2">Booking Subtitle</label><input class="fi" id="ct-bs" value="' + escAttr(c.bookSub) + '"></div></div>' +
-    '<label class="lb2" style="margin-top:10px">Inquiry Submit Button Text</label><input class="fi" id="ct-send" value="' + escAttr(c.sendBtn) + '"></div>' +
-    '<div class="card"><h3>Shoot Inquiries (leads)</h3><div class="hintx">Submitted inquiry forms are logged here' + (App.adapter.name === 'supabase' ? ' in your Supabase <b>inquiries</b> table' : ' on this device (connect Supabase in Tab 4 to store leads in the cloud)') + '.</div>' +
-    '<div class="bt-row" style="margin-bottom:10px"><button class="bt ghost sm" id="leads-refresh">Refresh Leads</button></div><div class="leads" id="leads-box"><div style="font-size:12px;color:rgba(232,241,236,.5)">Loading\u2026</div></div></div>' +
-    '<div class="bt-row"><button class="bt" id="ct-save">Save Contact Settings</button></div>';
+    '<label class="lb2" style="margin-top:10px">Inquiry Submit Button Text</label><input class="fi" id="ct-send" value="' + escAttr(c.sendBtn) + '">' +
+    '<label class="lb2" style="margin-top:12px">Booking Form Shoot Types (one per line)</label><textarea class="fi" id="ct-inq-types" style="min-height:105px" placeholder="Wedding Cinema&#10;Pre-Wedding Shoot">' + esc(inqTypes) + '</textarea></div>' +
+    '<div class="bt-row" style="margin-bottom:16px"><button class="bt" id="ct-save">Save Contact Settings Live</button></div>' +
+    '<div class="card"><h3>Shoot Inquiries (Leads)</h3><div class="hintx">Visitor booking forms are saved live in ' + (App.adapter.name === 'firebase' ? '<b>Firebase Cloud Firestore</b> (private — only visible to you)' : 'local preview storage') + '.</div>' +
+    '<div class="bt-row" style="margin-bottom:10px"><button class="bt ghost sm" id="leads-refresh">Refresh Leads</button></div><div class="leads" id="leads-box"><div style="font-size:12px;color:rgba(232,241,236,.5)">Loading\u2026</div></div></div>';
   const bindSw = (id2) => { $('#' + id2).addEventListener('click', () => $('#' + id2).classList.toggle('on')); };
   ['sw-insta', 'sw-yt', 'sw-wa'].forEach(bindSw);
   $('#ct-save').addEventListener('click', async () => {
@@ -2243,38 +2429,61 @@ function renderContactTab(main) {
     s.instagramUrl = $('#so-insta-url').value.trim(); s.instagramLabel = $('#so-insta-lb').value; s.instagramShow = $('#sw-insta').classList.contains('on');
     s.youtubeUrl = $('#so-yt-url').value.trim(); s.youtubeLabel = $('#so-yt-lb').value; s.youtubeShow = $('#sw-yt').classList.contains('on');
     s.whatsappUrl = $('#so-wa-url').value.trim(); s.whatsappLabel = $('#so-wa-lb').value; s.whatsappShow = $('#sw-wa').classList.contains('on');
+    const parsedTypes = ($('#ct-inq-types').value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    App.cms.inquiryTypes = parsedTypes.length ? parsedTypes : INQUIRY_TYPES.slice();
     /* auto-sync badge rows (INSTA / CONTACT) with the global contact state */
     const rows = App.cms.badge.rows || [];
     if (rows[2]) rows[2].value = s.instagramLabel || rows[2].value;
     if (rows[3]) rows[3].value = c.phone || rows[3].value;
-    try { await App.adapter.saveSite(App.cms); applyCms(); toast('Contact settings saved \u2014 site updated live'); }
+    try { await App.adapter.saveSite(App.cms); applyCms(); toast('Contact settings saved \u2014 updated live for all visitors'); }
     catch (err) { toast('Save failed: ' + err.message); }
   });
   const loadLeads = async () => {
     try {
       const leads = await App.adapter.getInquiries();
-      $('#leads-box').innerHTML = leads.length ? leads.map((l) =>
-        '<div class="lead"><span class="when">' + esc((l.created_at || '').slice(0, 16).replace('T', ' ')) + '</span><b>' + esc(l.name || '\u2014') + '</b> \u2022 ' + esc(l.shoot_type || '') + ' \u2022 ' + esc(l.shoot_date || 'flexible') + '<br>' + esc([l.shoot_location, l.phone].filter(Boolean).join(' \u2022 ')) + (l.message ? '<br>' + esc(l.message) : '') + '</div>').join('')
+      const box = $('#leads-box');
+      if (!box) return;
+      box.innerHTML = leads.length ? leads.map((l) => {
+        const replyUrl = l.phone ? waLink(l.phone, 'Hi ' + (l.name || '') + '! Thanks for reaching out to ' + (c.brand || 'AB VISUALS') + ' regarding your ' + (l.shoot_type || 'shoot') + '.') : '';
+        return '<div class="lead"><span class="when">' + esc((l.created_at || '').slice(0, 16).replace('T', ' ')) + '</span><b>' + esc(l.name || '\u2014') + '</b> \u2022 ' + esc(l.shoot_type || '') + ' \u2022 ' + esc(l.shoot_date || 'flexible') + '<br>' + esc([l.shoot_location, l.phone].filter(Boolean).join(' \u2022 ')) + (l.message ? '<br>' + esc(l.message) : '') +
+          '<div class="bt-row" style="margin-top:8px">' +
+            (replyUrl ? '<a class="bt green sm" href="' + escAttr(replyUrl) + '" target="_blank" rel="noopener">Reply on WhatsApp \u2197</a>' : '') +
+            (l.id ? '<button class="bt danger sm lead-del" data-id="' + escAttr(l.id) + '" type="button">Delete</button>' : '') +
+          '</div></div>';
+      }).join('')
         : '<div style="font-size:12px;color:rgba(232,241,236,.5)">No inquiries yet.</div>';
+      $$('.lead-del', box).forEach((btn) => btn.addEventListener('click', async () => {
+        const ok = await askConfirm('Delete this shoot inquiry permanently?', 'Delete Lead');
+        if (!ok) return;
+        try {
+          await App.adapter.deleteInquiry(btn.dataset.id);
+          toast('Lead deleted');
+          loadLeads();
+        } catch (err) { toast('Delete failed: ' + err.message); }
+      }));
     } catch (e) { $('#leads-box').innerHTML = '<div style="font-size:12px;color:#ff9c9c">Could not load leads: ' + esc(e.message) + '</div>'; }
   };
   $('#leads-refresh').addEventListener('click', loadLeads);
   loadLeads();
 }
-/* ---------- tab 3: site text & services ---------- */
+/* ---------- tab 3: site text, services, categories & branding ---------- */
 function renderTextTab(main) {
   const cms = App.cms, h = cms.hero, b = cms.badge, n = cms.nav;
+  cms.seo = cms.seo || { title: DEFAULT_SITE.seo.title, description: DEFAULT_SITE.seo.description };
+  cms.visuals = cms.visuals || { heroPlateUrl: '', heroCutUrl: '', casePlateUrl: '', bgDark: '', accentMint: '' };
+  const catsText = (Array.isArray(cms.categories) && cms.categories.length ? cms.categories : SERVICES_PRESETS).join('\n');
+  const v = cms.visuals;
   main.innerHTML =
     '<div class="card"><h3>Home Hero Texts</h3><div class="hintx">The giant wordmark, the handwritten script and the scroll hint at the bottom of the hero.</div>' +
     '<label class="lb2">Giant Background Wordmark</label><input class="fi" id="tx-wm" value="' + escAttr(h.wordmark) + '">' +
     '<label class="lb2" style="margin-top:10px">Handwritten Script Tagline</label><input class="fi" id="tx-script" value="' + escAttr(h.script) + '">' +
     '<label class="lb2" style="margin-top:10px">Scroll Hint Text</label><input class="fi" id="tx-hint" value="' + escAttr(h.scrollHint) + '"></div>' +
-    '<div class="card"><h3>Lanyard ID Badge Customizer</h3><div class="hintx">Everything printed on the hanging pilot ID card.</div>' +
+    '<div class="card"><h3>Lanyard ID Badge Customizer</h3><div class="hintx">Everything printed on the hanging pilot ID card \u2014 all 4 rows save and sync live.</div>' +
     '<label class="lb2">Badge Heading (\\n = new line)</label><textarea class="fi" id="bd-head" style="min-height:60px">' + esc(b.heading) + '</textarea>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Badge Year</label><input class="fi" id="bd-year" value="' + escAttr(b.year) + '"></div>' +
     '<div><label class="lb2">Role Subtitle</label><input class="fi" id="bd-role" value="' + escAttr(b.role) + '"></div></div>' +
     '<label class="lb2" style="margin-top:10px">Badge Photo \u2014 upload your own portrait (blank = default studio cutout)</label>' +
-    '<div class="bt-row"><input type="file" id="bd-photo" accept="image/*" style="display:none"><button class="bt ghost sm" id="bd-photo-btn">Upload Badge Photo</button>' + (b.photoUrl ? '<button class="bt ghost sm" id="bd-photo-reset">Reset to Default Cutout</button>' : '') + '</div>' +
+    '<div class="bt-row"><input type="file" id="bd-photo" accept="image/*" style="display:none"><button class="bt ghost sm" id="bd-photo-btn" type="button">Upload Badge Photo</button>' + (b.photoUrl ? '<button class="bt ghost sm" id="bd-photo-reset" type="button">Reset to Default Cutout</button>' : '') + '</div>' +
     '<label class="lb2" style="margin-top:14px">Badge Table \u2014 4 rows (label / value)</label>' +
     (b.rows || []).map((r, j) => '<div class="row2" style="margin-top:8px"><input class="fi bdl" data-j="' + j + '" data-k="label" value="' + escAttr(r.label) + '"><input class="fi bdl" data-j="' + j + '" data-k="value" value="' + escAttr(r.value) + '"></div>').join('') + '</div>' +
     '<div class="card"><h3>Navigation &amp; Case Mode Labels</h3>' +
@@ -2287,18 +2496,48 @@ function renderTextTab(main) {
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Laptop Hover Prompt</label><input class="fi" id="nv-cue" value="' + escAttr(n.hoverCue) + '"></div>' +
     '<div><label class="lb2">All-Projects Modal Heading</label><input class="fi" id="nv-all" value="' + escAttr(n.allHeading) + '"></div></div>' +
     '<div class="row2" style="margin-top:10px"><div><label class="lb2">Browse Button Text</label><input class="fi" id="nv-browse" value="' + escAttr(n.browseBtn) + '"></div>' +
-    '<div><label class="lb2">Prev / Next Labels (one per line)</label><div class="row2"><input class="fi" id="nv-prev" value="' + escAttr(n.prevLabel) + '"><input class="fi" id="nv-next" value="' + escAttr(n.nextLabel) + '"></div></div></div></div>' +
+    '<div><label class="lb2">Prev / Next Labels</label><div class="row2"><input class="fi" id="nv-prev" value="' + escAttr(n.prevLabel) + '"><input class="fi" id="nv-next" value="' + escAttr(n.nextLabel) + '"></div></div></div></div>' +
     '<div class="card"><h3>Services Manager</h3><div class="hintx">Cards shown in the "services &amp; contact" drawer.</div><div id="svc-list"></div>' +
-    '<div class="bt-row"><button class="bt ghost sm" id="svc-add">+ Add Service</button></div></div>' +
-    '<div class="bt-row"><button class="bt" id="tx-save">Save Site Text</button></div>';
+    '<div class="bt-row"><button class="bt ghost sm" id="svc-add" type="button">+ Add Service</button></div></div>' +
+    '<div class="card"><h3>Portfolio Categories &amp; Filter Tabs</h3><div class="hintx">Categories shown in the Project Editor dropdown and the public "All Projects" filter bar (one per line).</div>' +
+    '<textarea class="fi" id="tx-cats" style="min-height:110px">' + esc(catsText) + '</textarea></div>' +
+    '<div class="card"><h3>SEO &amp; Browser Tab Title</h3><div class="hintx">Controls the browser tab title and Google/WhatsApp description for your portfolio.</div>' +
+    '<label class="lb2">Website Tab Title</label><input class="fi" id="seo-title" value="' + escAttr(cms.seo.title || '') + '">' +
+    '<label class="lb2" style="margin-top:10px">Meta Description</label><textarea class="fi" id="seo-desc" style="min-height:64px">' + esc(cms.seo.description || '') + '</textarea></div>' +
+    '<div class="card"><h3>Optional Visuals &amp; Theme Overrides</h3><div class="hintx">Leave untouched to keep the exact original AB VISUALS design &amp; plates. Upload custom images or pick colors only if you want to restyle from here.</div>' +
+    '<div class="row3">' +
+      '<div><label class="lb2">Hero Background Plate</label><div class="bt-row"><input type="file" id="vis-plate-f" accept="image/*" style="display:none"><button class="bt ghost sm" id="vis-plate-btn" type="button">Upload Plate</button>' + (v.heroPlateUrl ? '<button class="bt ghost sm" id="vis-plate-rst" type="button">Reset</button>' : '') + '</div></div>' +
+      '<div><label class="lb2">Hero Foreground Cutout</label><div class="bt-row"><input type="file" id="vis-cut-f" accept="image/*" style="display:none"><button class="bt ghost sm" id="vis-cut-btn" type="button">Upload Cutout</button>' + (v.heroCutUrl ? '<button class="bt ghost sm" id="vis-cut-rst" type="button">Reset</button>' : '') + '</div></div>' +
+      '<div><label class="lb2">Laptop Scene Background</label><div class="bt-row"><input type="file" id="vis-case-f" accept="image/*" style="display:none"><button class="bt ghost sm" id="vis-case-btn" type="button">Upload Scene</button>' + (v.casePlateUrl ? '<button class="bt ghost sm" id="vis-case-rst" type="button">Reset</button>' : '') + '</div></div>' +
+    '</div>' +
+    '<div class="row2" style="margin-top:12px">' +
+      '<div><label class="lb2">Primary Background Hex (blank = default #0b2f20)</label><input class="fi" id="vis-bg" value="' + escAttr(v.bgDark || '') + '" placeholder="#0b2f20"></div>' +
+      '<div><label class="lb2">Accent Highlight Hex (blank = default #cfeee0)</label><input class="fi" id="vis-mint" value="' + escAttr(v.accentMint || '') + '" placeholder="#cfeee0"></div>' +
+    '</div></div>' +
+    '<div class="bt-row"><button class="bt" id="tx-save">Save All Site Changes Live</button></div>';
+
+  /* Bind badge 4-row inputs live */
+  $$('.bdl', main).forEach((inp) => {
+    const syncRow = () => {
+      const j = +inp.dataset.j;
+      if (b.rows && b.rows[j]) b.rows[j][inp.dataset.k] = inp.value;
+    };
+    inp.addEventListener('input', syncRow);
+    inp.addEventListener('change', syncRow);
+  });
+
   const renderSvcs = () => {
     $('#svc-list').innerHTML = (cms.services || []).map((sv, j) =>
       '<div class="svc-row"><div class="row2"><input class="fi svx" data-j="' + j + '" data-k="title" value="' + escAttr(sv.title) + '" placeholder="title">' +
       '<select class="fi svx" data-j="' + j + '" data-k="icon">' + ['drone', 'film', 'heart', 'video', 'music', 'building', 'rocket'].map((ic) => '<option' + (sv.icon === ic ? ' selected' : '') + '>' + ic + '</option>').join('') + '</select></div>' +
       '<textarea class="fi svx" data-j="' + j + '" data-k="desc" style="min-height:52px;margin-top:8px" placeholder="short description">' + esc(sv.desc) + '</textarea>' +
       '<div class="row2" style="margin-top:8px"><input class="fi svx" data-j="' + j + '" data-k="tag" value="' + escAttr(sv.tag || '') + '" placeholder="tag">' +
-      '<div class="bt-row"><button class="ib" data-up="' + j + '">\u2191</button><button class="ib" data-dn="' + j + '">\u2193</button><button class="ib del" data-rm="' + j + '">\u2715</button></div></div></div>').join('');
-    $$('.svx', $('#svc-list')).forEach((inp) => inp.addEventListener('change', () => { cms.services[+inp.dataset.j][inp.dataset.k] = inp.value; }));
+      '<div class="bt-row"><button class="ib" data-up="' + j + '" type="button">\u2191</button><button class="ib" data-dn="' + j + '" type="button">\u2193</button><button class="ib del" data-rm="' + j + '" type="button">\u2715</button></div></div></div>').join('');
+    $$('.svx', $('#svc-list')).forEach((inp) => {
+      const sync = () => { cms.services[+inp.dataset.j][inp.dataset.k] = inp.value; };
+      inp.addEventListener('input', sync);
+      inp.addEventListener('change', sync);
+    });
     $$('[data-up]', $('#svc-list')).forEach((bt) => bt.addEventListener('click', () => { const j = +bt.dataset.up; if (j > 0) { const t = cms.services[j - 1]; cms.services[j - 1] = cms.services[j]; cms.services[j] = t; renderSvcs(); } }));
     $$('[data-dn]', $('#svc-list')).forEach((bt) => bt.addEventListener('click', () => { const j = +bt.dataset.dn; if (j < cms.services.length - 1) { const t = cms.services[j + 1]; cms.services[j + 1] = cms.services[j]; cms.services[j] = t; renderSvcs(); } }));
     $$('[data-rm]', $('#svc-list')).forEach((bt) => bt.addEventListener('click', () => { cms.services.splice(+bt.dataset.rm, 1); renderSvcs(); }));
@@ -2310,11 +2549,31 @@ function renderTextTab(main) {
     const f = e2.target.files[0];
     if (!f) return;
     toast('Optimizing photo\u2026');
-    try { const res = await App.adapter.uploadImage(f, () => {}); cms.badge.photoUrl = res.url; renderTextTab(main); toast('Badge photo updated \u2014 press Save Site Text'); }
+    try { const res = await App.adapter.uploadImage(f, () => {}); cms.badge.photoUrl = res.url; renderTextTab(main); toast('Badge photo uploaded \u2014 press Save All Site Changes Live'); }
     catch (err) { toast('Upload failed: ' + err.message); }
   });
   const rst = $('#bd-photo-reset');
   if (rst) rst.addEventListener('click', () => { cms.badge.photoUrl = ''; renderTextTab(main); });
+
+  /* Optional visual image uploaders */
+  const bindVisUpload = (btnId, fileId, rstId, key, label) => {
+    const btn = $('#' + btnId), fl = $('#' + fileId), rb = $('#' + rstId);
+    if (btn && fl) {
+      btn.addEventListener('click', () => fl.click());
+      fl.addEventListener('change', async (ev) => {
+        const f = ev.target.files[0];
+        if (!f) return;
+        toast('Uploading ' + label + '\u2026');
+        try { const res = await App.adapter.uploadImage(f, () => {}); cms.visuals[key] = res.url; renderTextTab(main); toast(label + ' ready \u2014 press Save All Site Changes Live'); }
+        catch (err) { toast('Upload failed: ' + err.message); }
+      });
+    }
+    if (rb) rb.addEventListener('click', () => { cms.visuals[key] = ''; renderTextTab(main); });
+  };
+  bindVisUpload('vis-plate-btn', 'vis-plate-f', 'vis-plate-rst', 'heroPlateUrl', 'Hero Plate');
+  bindVisUpload('vis-cut-btn', 'vis-cut-f', 'vis-cut-rst', 'heroCutUrl', 'Hero Cutout');
+  bindVisUpload('vis-case-btn', 'vis-case-f', 'vis-case-rst', 'casePlateUrl', 'Case Scene');
+
   $('#tx-save').addEventListener('click', async () => {
     h.wordmark = $('#tx-wm').value.trim() || 'AB VISUALS';
     h.script = $('#tx-script').value;
@@ -2322,11 +2581,26 @@ function renderTextTab(main) {
     b.heading = $('#bd-head').value;
     b.year = $('#bd-year').value.trim();
     b.role = $('#bd-role').value;
+    /* Read all 4 badge rows directly from DOM so edits are guaranteed to save */
+    $$('.bdl', main).forEach((inp) => {
+      const j = +inp.dataset.j;
+      if (b.rows && b.rows[j]) b.rows[j][inp.dataset.k] = inp.value;
+    });
     n.t1 = $('#nv-t1').value; n.t2 = $('#nv-t2').value; n.t3 = $('#nv-t3').value; n.t4 = $('#nv-t4').value;
     n.caseLogo = $('#nv-logo').value; n.ticketBtn = $('#nv-tbtn').value;
     n.hoverCue = $('#nv-cue').value; n.allHeading = $('#nv-all').value; n.browseBtn = $('#nv-browse').value;
     n.prevLabel = $('#nv-prev').value; n.nextLabel = $('#nv-next').value;
-    try { await App.adapter.saveSite(cms); applyCms(); toast('Site text saved \u2014 updated live'); }
+    const parsedCats = ($('#tx-cats').value || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    cms.categories = parsedCats.length ? parsedCats : SERVICES_PRESETS.slice();
+    cms.seo = {
+      title: $('#seo-title').value.trim() || DEFAULT_SITE.seo.title,
+      description: $('#seo-desc').value.trim() || DEFAULT_SITE.seo.description
+    };
+    cms.visuals = Object.assign({}, cms.visuals, {
+      bgDark: $('#vis-bg').value.trim(),
+      accentMint: $('#vis-mint').value.trim()
+    });
+    try { await App.adapter.saveSite(cms); applyCms(); toast('All site settings saved \u2014 updated live for everyone'); }
     catch (err) { toast('Save failed: ' + err.message); }
   });
 }
@@ -2335,9 +2609,12 @@ function renderSettingsTab(main) {
   const isCloud = App.adapter && App.adapter.name === 'firebase';
   const cfg = isCloud && App.adapter.config ? App.adapter.config : {};
   const userEmail = ADMIN.user ? ADMIN.user.email : '';
+  const projectId = cfg.projectId || 'rudranil-backup';
+  const authDomainsUrl = 'https://console.firebase.google.com/project/' + encodeURIComponent(projectId) + '/authentication/settings';
+  const origin = location.origin && location.origin !== 'null' ? location.origin : '';
   main.innerHTML =
     '<div class="card"><h3>Firebase Cloud Database &amp; Storage</h3>' +
-      '<div class="hintx">Connected directly to Firebase Firestore &amp; Firebase Storage. Every portfolio project, photo upload, contact edit, and site text update you save here syncs live to <b>all visitors on all devices</b>.</div>' +
+      '<div class="hintx">Connected directly to Firebase Firestore &amp; Firebase Storage. Every portfolio project, photo upload, YouTube link, contact edit, and site text update you save here syncs live to <b>all visitors on all devices</b>.</div>' +
       '<div class="row2">' +
         '<div><label class="lb2">Firebase Project ID</label><input class="fi" value="' + escAttr(cfg.projectId || 'Not connected') + '" readonly></div>' +
         '<div><label class="lb2">Storage Bucket</label><input class="fi" value="' + escAttr(cfg.storageBucket || 'Not configured') + '" readonly></div>' +
@@ -2346,6 +2623,15 @@ function renderSettingsTab(main) {
         '<div><label class="lb2">Firestore Database</label><input class="fi" value="' + escAttr(cfg.firestoreDatabaseId || '(default)') + '" readonly></div>' +
         '<div><label class="lb2">Cloud Sync Status</label><input class="fi" value="' + (isCloud ? 'Connected \u2022 Real-Time Sync Active' : 'Offline Local Preview') + '" readonly></div>' +
       '</div>' +
+      (isCloud ? '<div class="bt-row" style="margin-top:12px"><button class="bt ghost sm" id="fb-health-btn" type="button">Test Live Firebase Sync</button><span id="fb-health-out" style="font-size:12px;color:rgba(207,238,224,.8)"></span></div>' : '') +
+    '</div>' +
+    '<div class="card"><h3>Admin Panel URLs &amp; Vercel Domain Setup</h3>' +
+      '<div class="hintx">Your Admin Panel works on all three URLs: <code>/amit231106</code>, <code>/amit231106.html</code>, and <code>/#/amit231106</code>. When hosting on Vercel or a custom domain, add your domain in Firebase Authorized Domains so Google Admin Login works there too.</div>' +
+      '<div class="row2">' +
+        '<div><label class="lb2">Direct Admin URL</label><input class="fi" value="' + escAttr(origin ? origin + '/amit231106' : '/amit231106') + '" readonly></div>' +
+        '<div><label class="lb2">Hash Fallback URL</label><input class="fi" value="' + escAttr(origin ? origin + '/#/amit231106' : '/#/amit231106') + '" readonly></div>' +
+      '</div>' +
+      '<div class="bt-row" style="margin-top:12px"><a class="bt ghost sm" href="' + escAttr(authDomainsUrl) + '" target="_blank" rel="noopener">Manage Firebase Authorized Domains \u2197</a></div>' +
     '</div>' +
     '<div class="card"><h3>Admin Authentication</h3>' +
       '<div class="hintx">Protected by Firebase Google Authentication and Firestore Security Rules. Only verified studio administrators can add, edit, or delete portfolio data.</div>' +
@@ -2360,6 +2646,22 @@ function renderSettingsTab(main) {
     '<button class="bt ghost" id="bk-demo">Restore Demo Projects</button>' +
     '<button class="bt danger" id="bk-reset">Reset Text to Defaults</button></div></div>';
 
+  const healthBtn = $('#fb-health-btn');
+  if (healthBtn && typeof App.adapter.checkHealth === 'function') {
+    healthBtn.addEventListener('click', async () => {
+      const out = $('#fb-health-out');
+      healthBtn.disabled = true;
+      if (out) out.textContent = 'Checking Firestore\u2026';
+      try {
+        const res = await App.adapter.checkHealth();
+        if (out) out.textContent = '\u2713 Cloud OK (' + res.latencyMs + 'ms) \u2022 ' + res.publishedCount + '/' + res.totalCount + ' live projects \u2022 Media: ' + res.uploadChannel;
+      } catch (err) {
+        if (out) out.textContent = 'Check failed: ' + (err && err.message ? err.message : err);
+      } finally {
+        healthBtn.disabled = false;
+      }
+    });
+  }
   const swBtn = $('#fb-switch');
   if (swBtn) swBtn.addEventListener('click', async () => {
     try {
@@ -2412,19 +2714,25 @@ function renderSettingsTab(main) {
     } catch (err) { toast('Restore failed: ' + err.message); }
   });
   $('#bk-reset').addEventListener('click', async () => {
-    const ok = await askConfirm('Reset ALL website text to AB VISUALS defaults? Projects and photos are kept.', 'Reset Text');
+    const ok = await askConfirm('Reset ALL website text & visual overrides to AB VISUALS defaults? Projects and photos are kept.', 'Reset Text');
     if (!ok) return;
     App.cms = deepMerge(DEFAULT_SITE, {});
-    try { await App.adapter.saveSite(App.cms); applyCms(); toast('Text reset to defaults live'); }
+    try { await App.adapter.saveSite(App.cms); applyCms(); toast('Text & visuals reset to defaults live'); }
     catch (err) { toast('Reset failed: ' + err.message); }
   });
 }
 /* ================= router & boot ================= */
-const ADMIN_PATH_RE = /\/amit231106\/?$/;
+const ADMIN_PATH_RE = /\/amit231106(?:\.html)?\/?$/i;
 function route() {
-  const h = (location.hash || '').replace(/^#/, '').replace(/\/+$/, '');
+  const h = (location.hash || '').replace(/^#/, '').replace(/\/+$/, '').toLowerCase();
+  const qs = new URLSearchParams(location.search || '');
   const wasAdmin = App.isAdminRoute;
-  App.isAdminRoute = h === '/amit231106' || ADMIN_PATH_RE.test(location.pathname || '') || window.AB_FORCE_ADMIN === true;
+  App.isAdminRoute =
+    h === '/amit231106' ||
+    h === 'amit231106' ||
+    qs.get('admin') === 'amit231106' ||
+    ADMIN_PATH_RE.test(location.pathname || '') ||
+    window.AB_FORCE_ADMIN === true;
   if (App.isAdminRoute) {
     if (!wasAdmin) { try { stopPreview(); } catch (e) {} }
     $('#site').classList.add('hidden');

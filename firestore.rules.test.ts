@@ -58,3 +58,7 @@ test('Dirty Dozen #11-12: inquiries PII is admin-only and drafts are hidden from
   assert.match(rulesText, /allow get: if isValidId\(projectId\) && \(existing\(\)\.is_published == true \|\| isAdmin\(\)\);/);
   assert.match(rulesText, /allow list: if resource\.data\.is_published == true \|\| isBootstrappedAdmin\(\);/);
 });
+
+test('SiteContent validation supports expanded CMS keys while blocking arbitrary keys', () => {
+  assert.match(rulesText, /'seo',\s*'categories',\s*'inquiryTypes',\s*'visuals'/);
+});

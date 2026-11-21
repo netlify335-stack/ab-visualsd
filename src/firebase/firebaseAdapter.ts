@@ -574,6 +574,15 @@ export const FirebaseAdapter = {
         photoUrl: await resolveMediaUrl(rawData.badge.photoUrl),
       };
     }
+    if (rawData.visuals && typeof rawData.visuals === 'object') {
+      const vis = { ...rawData.visuals };
+      for (const k of ['heroPlateUrl', 'heroCutUrl', 'casePlateUrl'] as const) {
+        if (vis[k] && isMediaRef(vis[k])) {
+          vis[k] = await resolveMediaUrl(vis[k]);
+        }
+      }
+      rawData.visuals = vis;
+    }
     return rawData;
   },
 
@@ -583,6 +592,14 @@ export const FirebaseAdapter = {
     if (copy.badge?.photoUrl) {
       const { url } = await dehydrateUrlForFirestore(copy.badge.photoUrl, user.uid, 800, 800);
       copy.badge.photoUrl = url;
+    }
+    if (copy.visuals && typeof copy.visuals === 'object') {
+      for (const k of ['heroPlateUrl', 'heroCutUrl', 'casePlateUrl'] as const) {
+        if (copy.visuals[k]) {
+          const { url } = await dehydrateUrlForFirestore(copy.visuals[k], user.uid, 1920, 1080);
+          copy.visuals[k] = url;
+        }
+      }
     }
     const cleanData = normalizeSiteContentData(copy);
     const docRef = doc(db, 'site_content', 'main');
@@ -696,10 +713,44 @@ export const FirebaseAdapter = {
       handleFirestoreError(error, OperationType.LIST, 'inquiries');
     }
     const items: Array<Record<string, unknown>> = [];
-    snap.forEach((d) => items.push(d.data()));
+    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
     return items
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
       .slice(0, 50);
+  },
+
+  async deleteInquiry(id: string): Promise<void> {
+    await requireVerifiedAdmin();
+    const safeId = sanitizeId(id, 'inq');
+    try {
+      await deleteDoc(doc(db, 'inquiries', safeId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `inquiries/${safeId}`);
+    }
+  },
+
+  async checkHealth(): Promise<{
+    ok: boolean;
+    publishedCount: number;
+    totalCount: number;
+    siteConfigured: boolean;
+    uploadChannel: string;
+    latencyMs: number;
+  }> {
+    const t0 = performance.now();
+    const [siteSnap, projects] = await Promise.all([
+      getDoc(doc(db, 'site_content', 'main')),
+      this.getProjects(true),
+    ]);
+    const publishedCount = projects.filter((p) => p.is_published !== false).length;
+    return {
+      ok: true,
+      publishedCount,
+      totalCount: projects.length,
+      siteConfigured: siteSnap.exists(),
+      uploadChannel: lastUploadChannel || (storageUnavailable ? 'firestore-media' : 'firebase-storage (auto-fallback enabled)'),
+      latencyMs: Math.max(1, Math.round(performance.now() - t0)),
+    };
   },
 
   async seedIfEmpty(

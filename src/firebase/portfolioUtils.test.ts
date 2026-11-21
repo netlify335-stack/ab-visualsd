@@ -10,6 +10,9 @@ import {
   extractMediaIdsFromProject,
   sortProjects,
   filterPublishedProjects,
+  extractYouTubeId,
+  toYouTubeWatchUrl,
+  shouldPreferYouTubePreview,
   SCHEMA_LIMITS,
 } from './portfolioUtils';
 
@@ -55,13 +58,24 @@ test('normalizeProjectPayload enforces blueprint keys, limits, and array bounds'
   assert.equal('shadowField' in payload, false);
 });
 
-test('normalizeSiteContentData strips disallowed top-level keys', () => {
+test('normalizeSiteContentData keeps expanded CMS keys and strips disallowed keys', () => {
   const clean = normalizeSiteContentData({
     hero: { wordmark: 'AB VISUALS' },
     contact: { brand: 'AB VISUALS' },
+    seo: { title: 'AB VISUALS' },
+    categories: ['Wedding Cinematography'],
+    inquiryTypes: ['Wedding Cinema'],
+    visuals: { accentMint: '#cfeee0' },
     evilKey: true,
   });
-  assert.deepEqual(Object.keys(clean).sort(), ['contact', 'hero']);
+  assert.deepEqual(Object.keys(clean).sort(), [
+    'categories',
+    'contact',
+    'hero',
+    'inquiryTypes',
+    'seo',
+    'visuals',
+  ]);
 });
 
 test('normalizeInquiryPayload enforces non-empty name and field truncation', () => {
@@ -106,5 +120,50 @@ test('sortProjects and filterPublishedProjects order and filter correctly', () =
   assert.deepEqual(
     filterPublishedProjects(sortProjects(items)).map((x) => x.id),
     ['a', 'b']
+  );
+});
+
+test('extractYouTubeId and toYouTubeWatchUrl support all YouTube link formats', () => {
+  assert.equal(extractYouTubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=12s'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://youtu.be/dQw4w9WgXcQ?si=abc123'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://m.youtube.com/watch?feature=shared&v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://www.youtube.com/live/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
+  assert.equal(extractYouTubeId('https://vimeo.com/123456'), null);
+  assert.equal(
+    toYouTubeWatchUrl('https://youtu.be/dQw4w9WgXcQ?si=xyz'),
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+  );
+});
+
+test('shouldPreferYouTubePreview overrides demo R2 MP4 when YouTube links are added, but keeps custom MP4s', () => {
+  assert.equal(
+    shouldPreferYouTubePreview({
+      preview_video_url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4',
+      youtube_urls: ['https://youtu.be/dQw4w9WgXcQ'],
+    }),
+    true
+  );
+  assert.equal(
+    shouldPreferYouTubePreview({
+      preview_video_url: '',
+      youtube_urls: ['https://youtu.be/dQw4w9WgXcQ'],
+    }),
+    true
+  );
+  assert.equal(
+    shouldPreferYouTubePreview({
+      preview_video_url: 'https://cdn.abvisuals.in/custom-reel.mp4',
+      youtube_urls: ['https://youtu.be/dQw4w9WgXcQ'],
+    }),
+    false
+  );
+  assert.equal(
+    shouldPreferYouTubePreview({
+      preview_video_url: 'https://pub-86dc5b5484314368ac5436a674b0d919.r2.dev/aaaf/vell-lookbook.mp4',
+      youtube_urls: [],
+    }),
+    false
   );
 });

@@ -1,6 +1,8 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/amit231106", "destination": "/amit231106.html" },
+    { "source": "/amit231106/", "destination": "/amit231106.html" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

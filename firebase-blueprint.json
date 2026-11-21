@@ -112,7 +112,7 @@
     },
     "SiteContent": {
       "title": "SiteContent",
-      "description": "Global CMS configuration for hero copy, lanyard badge, navigation labels, public contact links, and services.",
+      "description": "Global CMS configuration for hero copy, lanyard badge, navigation labels, public contact links, services, SEO metadata, categories, inquiry shoot types, and optional visual overrides.",
       "type": "object",
       "properties": {
         "id": {
@@ -122,7 +122,7 @@
         },
         "data": {
           "type": "object",
-          "description": "Structured CMS data map (hero, badge, nav, contact, socials, services)."
+          "description": "Structured CMS data map (hero, badge, nav, contact, socials, services, seo, categories, inquiryTypes, visuals)."
         },
         "seeded": {
           "type": "boolean"
