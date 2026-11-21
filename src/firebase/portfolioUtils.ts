@@ -112,6 +112,28 @@ export function shouldPreferYouTubePreview(project: {
   return !prev || isDemoPreviewVideoUrl(prev);
 }
 
+export function normalizePhoneNumber(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D+/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits.slice(2);
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+  return digits;
+}
+
+export function resolveAdminEmailForPhone(
+  rawPhone: unknown,
+  allowedPhone: string,
+  adminEmail: string
+): string | null {
+  const input = normalizePhoneNumber(rawPhone);
+  const expected = normalizePhoneNumber(allowedPhone);
+  if (!input || !expected || input !== expected) return null;
+  return adminEmail;
+}
+
 export function truncateStr(val: unknown, maxLen: number): string {
   const s = val == null ? '' : String(val);
   return s.length > maxLen ? s.slice(0, maxLen) : s;

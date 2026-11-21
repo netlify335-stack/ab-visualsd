@@ -1911,6 +1911,7 @@ function renderAdminLogin(root) {
   const wrongAccount = isFirebase && ADMIN.user && !ADMIN.user.isAdmin;
   const projectId = (isFirebase && App.adapter.config && App.adapter.config.projectId) || 'rudranil-backup';
   const authDomainsUrl = 'https://console.firebase.google.com/project/' + encodeURIComponent(projectId) + '/authentication/settings';
+  const authProvidersUrl = 'https://console.firebase.google.com/project/' + encodeURIComponent(projectId) + '/authentication/providers';
   root.innerHTML = '<div class="adm-login"><div class="box">' +
     '<div class="lgo">AB</div><h1>AB VISUALS Studio Admin</h1>' +
     '<div class="sub2">Control panel \u2014 projects, media, contacts &amp; site text</div>' +
@@ -1918,9 +1919,17 @@ function renderAdminLogin(root) {
       ? (wrongAccount
           ? '<div class="hintp" style="margin-bottom:14px;border-color:rgba(255,156,156,.45);color:#ffc2c2">Signed in as <b>' + esc(ADMIN.user.email) + '</b>.<br>This Google account is not authorized as Studio Admin' + (adminEmail ? ' (use <b>' + esc(adminEmail) + '</b>)' : '') + '.</div>' +
             '<div class="bt-row" style="justify-content:center;margin-top:14px"><button class="bt" id="adm-google-go">Switch Google Account</button><button class="bt ghost" id="adm-google-out">Sign Out</button></div>'
-          : '<div class="bt-row" style="justify-content:center;margin-top:18px"><button class="bt" id="adm-google-go" style="width:100%">Sign in with Google (Admin)</button></div>' +
+          : '<form id="adm-phone-form" autocomplete="on" style="margin-top:16px;text-align:left">' +
+              '<label class="lb2" for="adm-phone">Mobile Number</label>' +
+              '<input class="fi" id="adm-phone" type="tel" inputmode="numeric" autocomplete="username" placeholder="Enter 10-digit number" style="margin-bottom:10px">' +
+              '<label class="lb2" for="adm-pass">Password</label>' +
+              '<input class="fi" id="adm-pass" type="password" autocomplete="current-password" placeholder="Enter password">' +
+              '<div class="bt-row" style="justify-content:center;margin-top:12px"><button class="bt" id="adm-phone-go" type="submit" style="width:100%">Login with Number</button></div>' +
+            '</form>' +
+            '<div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:rgba(232,241,236,.4);font-size:11px;letter-spacing:.12em;text-transform:uppercase"><span style="flex:1;height:1px;background:rgba(255,255,255,.1)"></span><span>or</span><span style="flex:1;height:1px;background:rgba(255,255,255,.1)"></span></div>' +
+            '<div class="bt-row" style="justify-content:center"><button class="bt ghost" id="adm-google-go" type="button" style="width:100%">Sign in with Google (Admin)</button></div>' +
             '<div id="adm-auth-err"></div>' +
-            '<div class="hintp">Connected to <b>Firebase Cloud</b>.<br>Sign in with your authorized studio Google account to add, edit, or delete portfolio items live for all visitors.</div>')
+            '<div class="hintp">Connected to <b>Firebase Cloud</b>.<br>Sign in with your studio number &amp; password or Google Admin account to manage portfolio items live for all visitors.</div>')
       : '<input class="fi" id="pw" type="password" placeholder="Passcode" style="letter-spacing:.2em;text-align:center">' +
         '<div class="bt-row" style="justify-content:center;margin-top:14px"><button class="bt" id="pw-go">Unlock Panel</button></div>' +
         '<div class="hintp">Offline local preview mode \u2014 default passcode: <b>amit231106</b></div>') +
@@ -1928,6 +1937,47 @@ function renderAdminLogin(root) {
     '</div></div>';
 
   if (isFirebase) {
+    const phoneForm = $('#adm-phone-form');
+    if (phoneForm) phoneForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const phone = ($('#adm-phone') ? $('#adm-phone').value : '').trim();
+      const pass = $('#adm-pass') ? $('#adm-pass').value : '';
+      const pbtn = $('#adm-phone-go');
+      const errBox = $('#adm-auth-err');
+      if (errBox) errBox.innerHTML = '';
+      if (!phone || !pass) { toast('Enter mobile number and password'); return; }
+      if (pbtn) { pbtn.disabled = true; pbtn.textContent = 'Signing in\u2026'; }
+      try {
+        ADMIN.user = await App.adapter.signInAdminWithPhone(phone, pass);
+        if (ADMIN.user && ADMIN.user.isAdmin) {
+          toast('Signed in to Studio Admin');
+          await ensureFirebaseSeeded();
+          renderAdminPanel(root);
+        } else {
+          renderAdminLogin(root);
+        }
+      } catch (err) {
+        const code = (err && err.code) || '';
+        const msg = (err && err.message) || 'Login failed';
+        if (code === 'auth/operation-not-allowed') {
+          if (errBox) {
+            errBox.innerHTML = '<div class="hintp" style="margin-top:12px;border-color:rgba(255,156,156,.5);color:#ffd0d0;text-align:left"><b>Enable Email/Password in Firebase Auth first:</b><br>Open Firebase Console (signed in as <b>' + esc(adminEmail || 'admin') + '</b>) \u2192 Authentication \u2192 Sign-in method \u2192 enable <b>Email/Password</b>.<br><a href="' + escAttr(authProvidersUrl) + '" target="_blank" rel="noopener" style="color:#cfeee0;text-decoration:underline;display:inline-block;margin-top:6px">Open Firebase Sign-in Method \u2197</a></div>';
+          }
+          toast('Enable Email/Password provider in Firebase Console');
+        } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+          if (errBox) {
+            errBox.innerHTML = '<div class="hintp" style="margin-top:12px;border-color:rgba(255,156,156,.5);color:#ffd0d0;text-align:left"><b>Invalid number or password.</b><br>First time using Number Login? Sign in once with <b>Google (Admin)</b> below \u2192 open <b>Cloud &amp; Security</b> tab \u2192 set your Direct Login password.</div>';
+          }
+          toast('Invalid number or password');
+        } else {
+          if (errBox) {
+            errBox.innerHTML = '<div class="hintp" style="margin-top:12px;border-color:rgba(255,156,156,.5);color:#ffd0d0;text-align:left">' + esc(msg) + '</div>';
+          }
+          toast(msg);
+        }
+        if (pbtn) { pbtn.disabled = false; pbtn.textContent = 'Login with Number'; }
+      }
+    });
     const btn = $('#adm-google-go');
     if (btn) btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -2634,11 +2684,18 @@ function renderSettingsTab(main) {
       '<div class="bt-row" style="margin-top:12px"><a class="bt ghost sm" href="' + escAttr(authDomainsUrl) + '" target="_blank" rel="noopener">Manage Firebase Authorized Domains \u2197</a></div>' +
     '</div>' +
     '<div class="card"><h3>Admin Authentication</h3>' +
-      '<div class="hintx">Protected by Firebase Google Authentication and Firestore Security Rules. Only verified studio administrators can add, edit, or delete portfolio data.</div>' +
+      '<div class="hintx">Protected by Firebase Authentication and Firestore Security Rules. Supports both Google Admin Sign-In and Direct Number Login (<b>9942632859</b>).</div>' +
       '<div class="bt-row">' +
         '<span style="font-size:13px;color:rgba(232,241,236,.85)">Signed in as: <b>' + esc(userEmail || 'Local Preview') + '</b></span>' +
         (isCloud ? '<button class="bt ghost sm" id="fb-switch">Switch Account</button><button class="bt danger sm" id="fb-signout">Sign Out</button>' : '') +
       '</div>' +
+      (isCloud
+        ? '<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)">' +
+            '<label class="lb2">Direct Number Login Password (for 9942632859 \u2022 ' + (App.adapter.hasPasswordLoginEnabled && App.adapter.hasPasswordLoginEnabled() ? 'Active' : 'Not linked yet') + ')</label>' +
+            '<div class="bt-row"><input class="fi" id="fb-direct-pw" type="password" placeholder="Enter new password (min 6 chars)" style="flex:1;min-width:200px"><button class="bt sm" id="fb-direct-save" type="button">' + (App.adapter.hasPasswordLoginEnabled && App.adapter.hasPasswordLoginEnabled() ? 'Update Password' : 'Activate Number Login') + '</button></div>' +
+            '<div id="fb-direct-status" style="font-size:12px;color:rgba(207,238,224,.75);margin-top:6px"></div>' +
+          '</div>'
+        : '') +
     '</div>' +
     '<div class="card"><h3>Backup, Restore &amp; Reset</h3><div class="hintx">Export includes every project, photo and all site text. Import replaces everything in Firebase \u2014 use carefully.</div>' +
     '<div class="bt-row"><button class="bt ghost" id="bk-export">Export Backup JSON</button>' +
@@ -2669,6 +2726,33 @@ function renderSettingsTab(main) {
       renderAdmin();
     } catch (err) { toast('Account switch failed: ' + (err && err.message ? err.message : 'Cancelled')); }
   });
+  const directBtn = $('#fb-direct-save');
+  if (directBtn && typeof App.adapter.setDirectLoginPassword === 'function') {
+    directBtn.addEventListener('click', async () => {
+      const pw = ($('#fb-direct-pw') ? $('#fb-direct-pw').value : '').trim();
+      const st = $('#fb-direct-status');
+      if (pw.length < 6) { toast('Password must be at least 6 characters'); return; }
+      directBtn.disabled = true;
+      if (st) st.textContent = 'Saving to Firebase Auth\u2026';
+      try {
+        const mode = await App.adapter.setDirectLoginPassword(pw);
+        if ($('#fb-direct-pw')) $('#fb-direct-pw').value = '';
+        if (st) st.textContent = '\u2713 Direct Number Login (' + mode + ') is active! You can now sign in with 9942632859 and your password on any device.';
+        toast('Direct Number Login ' + mode);
+      } catch (err) {
+        const code = (err && err.code) || '';
+        const msg = (err && err.message) || String(err);
+        if (code === 'auth/operation-not-allowed') {
+          if (st) st.textContent = 'Enable Email/Password in Firebase Console \u2192 Authentication \u2192 Sign-in method first, then click again.';
+        } else {
+          if (st) st.textContent = 'Failed: ' + msg;
+        }
+        toast('Could not activate: ' + msg);
+      } finally {
+        directBtn.disabled = false;
+      }
+    });
+  }
   const soBtn = $('#fb-signout');
   if (soBtn) soBtn.addEventListener('click', async () => {
     await App.adapter.signOutAdmin();

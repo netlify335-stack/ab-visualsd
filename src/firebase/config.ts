@@ -5,6 +5,7 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const ADMIN_EMAIL = 'netlify335@gmail.com';
+export const ADMIN_PHONE = '9942632859';
 export const FIREBASE_CONFIG = firebaseConfig;
 
 export const app = initializeApp(firebaseConfig);

@@ -55,7 +55,7 @@ test('Dirty Dozen #8-10: ID poisoning, oversized strings, and unbounded arrays a
 test('Dirty Dozen #11-12: inquiries PII is admin-only and drafts are hidden from non-admins', () => {
   assert.match(rulesText, /match \/inquiries\/\{inquiryId\}[\s\S]*?allow get: if isSignedIn\(\) && isValidId\(inquiryId\) && isAdmin\(\);/);
   assert.match(rulesText, /match \/inquiries\/\{inquiryId\}[\s\S]*?allow list: if isBootstrappedAdmin\(\);/);
-  assert.match(rulesText, /allow get: if isValidId\(projectId\) && \(existing\(\)\.is_published == true \|\| isAdmin\(\)\);/);
+  assert.match(rulesText, /allow get: if isValidId\(projectId\) && \(isAdmin\(\) \|\| \(resource != null && existing\(\)\.is_published == true\)\);/);
   assert.match(rulesText, /allow list: if resource\.data\.is_published == true \|\| isBootstrappedAdmin\(\);/);
 });
 

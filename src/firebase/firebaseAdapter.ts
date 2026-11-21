@@ -1,7 +1,12 @@
 import {
+  EmailAuthProvider,
+  linkWithCredential,
   onAuthStateChanged,
+  reauthenticateWithPopup,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   type User,
 } from 'firebase/auth';
 import {
@@ -27,6 +32,7 @@ import {
 } from 'firebase/storage';
 import {
   ADMIN_EMAIL,
+  ADMIN_PHONE,
   FIREBASE_CONFIG,
   OperationType,
   auth,
@@ -43,6 +49,7 @@ import {
   normalizeProjectPayload,
   normalizeSiteContentData,
   parseMediaRef,
+  resolveAdminEmailForPhone,
   sanitizeId,
   sortProjects,
   toMediaRef,
@@ -407,6 +414,57 @@ export const FirebaseAdapter = {
       photoURL: user.photoURL || '',
       isAdmin,
     };
+  },
+
+  async signInAdminWithPhone(phone: string, password: string): Promise<AdminUserState> {
+    const email = resolveAdminEmailForPhone(phone, ADMIN_PHONE, ADMIN_EMAIL);
+    if (!email || !password) {
+      throw new Error('Invalid mobile number or password.');
+    }
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    verifiedAdminCache = null;
+    const user = cred.user;
+    const isAdmin = await checkIsAdminUser(user);
+    return {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || user.email || 'Admin',
+      photoURL: user.photoURL || '',
+      isAdmin,
+    };
+  },
+
+  hasPasswordLoginEnabled(): boolean {
+    const user = auth.currentUser;
+    if (!user) return false;
+    return (user.providerData || []).some((p) => p.providerId === 'password');
+  },
+
+  async setDirectLoginPassword(password: string): Promise<'linked' | 'updated'> {
+    const user = await requireVerifiedAdmin();
+    const trimmed = String(password || '');
+    if (trimmed.length < 6) {
+      throw new Error('Password must be at least 6 characters.');
+    }
+    const alreadyLinked = (user.providerData || []).some((p) => p.providerId === 'password');
+    const runOp = async (): Promise<'linked' | 'updated'> => {
+      if (alreadyLinked) {
+        await updatePassword(user, trimmed);
+        return 'updated';
+      }
+      const cred = EmailAuthProvider.credential(user.email || ADMIN_EMAIL, trimmed);
+      await linkWithCredential(user, cred);
+      return 'linked';
+    };
+    try {
+      return await runOp();
+    } catch (err: any) {
+      if (err?.code === 'auth/requires-recent-login') {
+        await reauthenticateWithPopup(user, googleProvider);
+        return await runOp();
+      }
+      throw err;
+    }
   },
 
   async signOutAdmin(): Promise<void> {

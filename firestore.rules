@@ -137,7 +137,7 @@ service cloud.firestore {
 
     // ---------- /projects/{projectId} ----------
     match /projects/{projectId} {
-      allow get: if isValidId(projectId) && (existing().is_published == true || isAdmin());
+      allow get: if isValidId(projectId) && (isAdmin() || (resource != null && existing().is_published == true));
       allow list: if resource.data.is_published == true || isBootstrappedAdmin();
 
       allow create: if isSignedIn()

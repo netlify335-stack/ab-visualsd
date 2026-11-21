@@ -13,6 +13,8 @@ import {
   extractYouTubeId,
   toYouTubeWatchUrl,
   shouldPreferYouTubePreview,
+  normalizePhoneNumber,
+  resolveAdminEmailForPhone,
   SCHEMA_LIMITS,
 } from './portfolioUtils';
 
@@ -165,5 +167,23 @@ test('shouldPreferYouTubePreview overrides demo R2 MP4 when YouTube links are ad
       youtube_urls: [],
     }),
     false
+  );
+});
+
+test('normalizePhoneNumber and resolveAdminEmailForPhone handle Indian formats safely', () => {
+  assert.equal(normalizePhoneNumber('9942632859'), '9942632859');
+  assert.equal(normalizePhoneNumber('+91 99426-32859'), '9942632859');
+  assert.equal(normalizePhoneNumber('09942632859'), '9942632859');
+  assert.equal(
+    resolveAdminEmailForPhone('+91 99426 32859', '9942632859', 'netlify335@gmail.com'),
+    'netlify335@gmail.com'
+  );
+  assert.equal(
+    resolveAdminEmailForPhone('9999999999', '9942632859', 'netlify335@gmail.com'),
+    null
+  );
+  assert.equal(
+    resolveAdminEmailForPhone('', '9942632859', 'netlify335@gmail.com'),
+    null
   );
 });
