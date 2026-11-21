@@ -29,7 +29,14 @@ service cloud.firestore {
     }
 
     function isBootstrappedAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'netlify335@gmail.com';
+      return (
+        isVerifiedUser() && (
+          request.auth.token.email == 'netlify335@gmail.com' ||
+          request.auth.token.email == 'abvesuals@gmail.com'
+        )
+      ) || (
+        isSignedIn() && request.auth.uid == 'tDuKna31bgaJXZFSUbeXgO0DNkO2'
+      );
     }
 
     function isAdmin() {
@@ -132,6 +139,22 @@ service cloud.firestore {
         && data.keys().hasOnly(['email', 'role', 'createdAt'])
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
         && data.role is string && data.role == 'admin' && data.role.size() <= 20
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAnalyticsEvent(data) {
+      return data.keys().hasAll([
+          'id', 'type', 'projectId', 'projectTitle', 'created_at', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'type', 'projectId', 'projectTitle', 'created_at', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.type is string && data.type.size() <= 32
+        && data.type in ['visitor', 'home', 'portfolio', 'services', 'book', 'whatsapp', 'project_view']
+        && data.projectId is string && data.projectId.size() <= 128
+        && data.projectTitle is string && data.projectTitle.size() <= 200
+        && data.created_at is string && data.created_at.size() <= 64
         && data.createdAt is timestamp;
     }
 
@@ -247,6 +270,20 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'role']);
 
       allow delete: if isSignedIn() && isValidId(adminId) && isBootstrappedAdmin();
+    }
+
+    // ---------- /analytics_events/{eventId} ----------
+    match /analytics_events/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(eventId)
+        && isValidAnalyticsEvent(incoming())
+        && incoming().id == eventId
+        && incoming().createdAt == request.time;
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(eventId) && isAdmin();
     }
   }
 }

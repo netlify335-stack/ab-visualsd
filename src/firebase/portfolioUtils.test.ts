@@ -15,6 +15,10 @@ import {
   shouldPreferYouTubePreview,
   normalizePhoneNumber,
   resolveAdminEmailForPhone,
+  isAllowedAdminEmail,
+  isAuthorizedAdminIdentity,
+  normalizeAnalyticsEventPayload,
+  aggregateAnalyticsEvents,
   SCHEMA_LIMITS,
 } from './portfolioUtils';
 
@@ -185,5 +189,111 @@ test('normalizePhoneNumber and resolveAdminEmailForPhone handle Indian formats s
   assert.equal(
     resolveAdminEmailForPhone('', '9942632859', 'netlify335@gmail.com'),
     null
+  );
+});
+
+test('isAllowedAdminEmail and isAuthorizedAdminIdentity allow dual Gmail accounts and primary studio UID only', () => {
+  const allowed = ['netlify335@gmail.com', 'abvesuals@gmail.com'];
+  const primaryUid = 'tDuKna31bgaJXZFSUbeXgO0DNkO2';
+
+  assert.equal(isAllowedAdminEmail('netlify335@gmail.com', allowed), true);
+  assert.equal(isAllowedAdminEmail('ABVESUALS@gmail.com', allowed), true);
+  assert.equal(isAllowedAdminEmail('other@gmail.com', allowed), false);
+
+  // Verified Google login for both allowed Gmail accounts
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: 'g-1', email: 'netlify335@gmail.com', emailVerified: true }, allowed, primaryUid),
+    true
+  );
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: 'g-2', email: 'abvesuals@gmail.com', emailVerified: true }, allowed, primaryUid),
+    true
+  );
+
+  // Mobile number + password login for primary studio owner UID (even if emailVerified is false)
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: primaryUid, email: 'netlify335@gmail.com', emailVerified: false }, allowed, primaryUid),
+    true
+  );
+
+  // Spoofed unverified email with a different UID MUST be rejected
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: 'attacker-uid', email: 'netlify335@gmail.com', emailVerified: false }, allowed, primaryUid),
+    false
+  );
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: 'attacker-uid', email: 'abvesuals@gmail.com', emailVerified: false }, allowed, primaryUid),
+    false
+  );
+
+  // Unauthorized verified email MUST be rejected
+  assert.equal(
+    isAuthorizedAdminIdentity({ uid: 'random-uid', email: 'random@gmail.com', emailVerified: true }, allowed, primaryUid),
+    false
+  );
+});
+
+test('normalizeAnalyticsEventPayload validates allowlisted event types and bounds fields', () => {
+  const visitor = normalizeAnalyticsEventPayload({ type: 'visitor' }, 'evt-1');
+  assert.ok(visitor);
+  assert.equal(visitor.id, 'evt-1');
+  assert.equal(visitor.type, 'visitor');
+  assert.equal(visitor.projectId, '');
+  assert.equal(visitor.projectTitle, '');
+
+  const projView = normalizeAnalyticsEventPayload(
+    { type: 'project_view', projectId: 'proj-abc', projectTitle: 'UDAIPUR ROYAL WEDDING' },
+    'evt-2'
+  );
+  assert.ok(projView);
+  assert.equal(projView.type, 'project_view');
+  assert.equal(projView.projectId, 'proj-abc');
+  assert.equal(projView.projectTitle, 'UDAIPUR ROYAL WEDDING');
+
+  assert.equal(normalizeAnalyticsEventPayload({ type: 'invalid_type' }), null);
+});
+
+test('aggregateAnalyticsEvents counts all visitor/nav/whatsapp metrics and ranks most viewed portfolios', () => {
+  const projects = [
+    { id: 'p1', title: 'UDAIPUR ROYAL WEDDING', category: 'Wedding Cinematography', cover_image_url: 'https://img/1.jpg' },
+    { id: 'p2', title: 'GOA BEACH PRE-WEDDING', category: 'Pre-Wedding Films', cover_image_url: 'https://img/2.jpg' },
+    { id: 'p3', title: 'SKYLINE LUXURY VILLAS', category: 'Real Estate', cover_image_url: 'https://img/3.jpg' },
+  ];
+  const events = [
+    { type: 'visitor' as const },
+    { type: 'visitor' as const },
+    { type: 'home' as const },
+    { type: 'portfolio' as const },
+    { type: 'portfolio' as const },
+    { type: 'services' as const },
+    { type: 'book' as const },
+    { type: 'book' as const },
+    { type: 'book' as const },
+    { type: 'whatsapp' as const },
+    { type: 'whatsapp' as const },
+    { type: 'project_view' as const, projectId: 'p2', projectTitle: 'GOA BEACH PRE-WEDDING' },
+    { type: 'project_view' as const, projectId: 'p2', projectTitle: 'GOA BEACH PRE-WEDDING' },
+    { type: 'project_view' as const, projectId: 'p2', projectTitle: 'GOA BEACH PRE-WEDDING' },
+    { type: 'project_view' as const, projectId: 'p1', projectTitle: 'UDAIPUR ROYAL WEDDING' },
+  ];
+
+  const summary = aggregateAnalyticsEvents(events, projects);
+  assert.equal(summary.visitors, 2);
+  assert.equal(summary.home, 1);
+  assert.equal(summary.portfolio, 2);
+  assert.equal(summary.services, 1);
+  assert.equal(summary.book, 3);
+  assert.equal(summary.whatsapp, 2);
+  assert.equal(summary.totalClicks, 9);
+  assert.equal(summary.totalProjectViews, 4);
+  assert.equal(summary.topProject?.projectId, 'p2');
+  assert.equal(summary.topProject?.views, 3);
+  assert.deepEqual(
+    summary.projectViews.map((x) => [x.projectId, x.views]),
+    [
+      ['p2', 3],
+      ['p1', 1],
+      ['p3', 0],
+    ]
   );
 });

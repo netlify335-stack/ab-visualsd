@@ -253,6 +253,41 @@
         }
       },
       "required": ["email", "role", "createdAt"]
+    },
+    "AnalyticsEvent": {
+      "title": "AnalyticsEvent",
+      "description": "Anonymous visitor interaction event for the studio admin analytics dashboard (visitors, nav clicks, WhatsApp clicks, and portfolio project views). Contains no PII.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["visitor", "home", "portfolio", "services", "book", "whatsapp", "project_view"],
+          "maxLength": 32
+        },
+        "projectId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "projectTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "created_at": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "type", "projectId", "projectTitle", "created_at", "createdAt"]
     }
   },
   "firestore": {
@@ -274,7 +309,11 @@
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Studio administrator allowlist. Managed only by the bootstrapped primary admin."
+      "description": "Studio administrator allowlist. Managed only by bootstrapped studio admins."
+    },
+    "/analytics_events/{eventId}": {
+      "schema": { "$ref": "#/entities/AnalyticsEvent" },
+      "description": "Anonymous visitor and click analytics events. Publicly creatable with strict allowlisted enum validation; immutable; readable and deletable only by studio admins."
     }
   }
 }

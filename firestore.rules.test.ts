@@ -23,9 +23,11 @@ test('every collection declared in firebase-blueprint.json has an explicit match
   }
 });
 
-test('Dirty Dozen #1-2: admin auth mandates email_verified == true and blocks unauthenticated writes', () => {
+test('Dirty Dozen #1-2: admin auth mandates email_verified == true on emails and blocks unauthenticated writes', () => {
   assert.match(rulesText, /request\.auth\.token\.email_verified == true/);
   assert.match(rulesText, /request\.auth\.token\.email == 'netlify335@gmail\.com'/);
+  assert.match(rulesText, /request\.auth\.token\.email == 'abvesuals@gmail\.com'/);
+  assert.match(rulesText, /request\.auth\.uid == 'tDuKna31bgaJXZFSUbeXgO0DNkO2'/);
   assert.doesNotMatch(rulesText, /allow\s+(write|create|update|delete)\s*:\s*if\s+true\s*;/);
 });
 
@@ -52,9 +54,13 @@ test('Dirty Dozen #8-10: ID poisoning, oversized strings, and unbounded arrays a
   assert.match(rulesText, /data\.dataUrl\.size\(\) <= 850000/);
 });
 
-test('Dirty Dozen #11-12: inquiries PII is admin-only and drafts are hidden from non-admins', () => {
+test('Dirty Dozen #11-12: inquiries PII and analytics are admin-only to read, and drafts are hidden from non-admins', () => {
   assert.match(rulesText, /match \/inquiries\/\{inquiryId\}[\s\S]*?allow get: if isSignedIn\(\) && isValidId\(inquiryId\) && isAdmin\(\);/);
   assert.match(rulesText, /match \/inquiries\/\{inquiryId\}[\s\S]*?allow list: if isBootstrappedAdmin\(\);/);
+  assert.match(rulesText, /match \/analytics_events\/\{eventId\}[\s\S]*?allow get: if isSignedIn\(\) && isValidId\(eventId\) && isAdmin\(\);/);
+  assert.match(rulesText, /match \/analytics_events\/\{eventId\}[\s\S]*?allow list: if isBootstrappedAdmin\(\);/);
+  assert.match(rulesText, /match \/analytics_events\/\{eventId\}[\s\S]*?allow update: if false;/);
+  assert.match(rulesText, /data\.type in \['visitor', 'home', 'portfolio', 'services', 'book', 'whatsapp', 'project_view'\]/);
   assert.match(rulesText, /allow get: if isValidId\(projectId\) && \(isAdmin\(\) \|\| \(resource != null && existing\(\)\.is_published == true\)\);/);
   assert.match(rulesText, /allow list: if resource\.data\.is_published == true \|\| isBootstrappedAdmin\(\);/);
 });

@@ -15,7 +15,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -32,9 +34,11 @@ import {
 } from 'firebase/storage';
 import {
   ADMIN_EMAIL,
+  ADMIN_EMAILS,
   ADMIN_PHONE,
   FIREBASE_CONFIG,
   OperationType,
+  PRIMARY_ADMIN_UID,
   auth,
   db,
   googleProvider,
@@ -43,8 +47,11 @@ import {
 } from './config';
 import {
   SCHEMA_LIMITS,
+  aggregateAnalyticsEvents,
   extractMediaIdsFromProject,
+  isAuthorizedAdminIdentity,
   isMediaRef,
+  normalizeAnalyticsEventPayload,
   normalizeInquiryPayload,
   normalizeProjectPayload,
   normalizeSiteContentData,
@@ -53,6 +60,9 @@ import {
   sanitizeId,
   sortProjects,
   toMediaRef,
+  type AnalyticsEventRecord,
+  type AnalyticsEventType,
+  type AnalyticsSummary,
   type GalleryImage,
   type InquiryInput,
   type PortfolioProject,
@@ -81,8 +91,17 @@ function generateId(prefix: string): string {
 }
 
 async function checkIsAdminUser(user: User | null): Promise<boolean> {
-  if (!user || !user.emailVerified) return false;
-  if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return true;
+  if (!user) return false;
+  if (
+    isAuthorizedAdminIdentity(
+      { uid: user.uid, email: user.email, emailVerified: user.emailVerified },
+      ADMIN_EMAILS,
+      PRIMARY_ADMIN_UID
+    )
+  ) {
+    return true;
+  }
+  if (!user.emailVerified) return false;
   if (verifiedAdminCache && verifiedAdminCache.uid === user.uid) {
     return verifiedAdminCache.isAdmin;
   }
@@ -99,7 +118,7 @@ async function checkIsAdminUser(user: User | null): Promise<boolean> {
 async function requireVerifiedAdmin(): Promise<User> {
   const user = auth.currentUser;
   if (!user) {
-    throw new Error('Please sign in with Google Admin account first.');
+    throw new Error('Please sign in as Studio Admin first.');
   }
   const ok = await checkIsAdminUser(user);
   if (!ok) {
@@ -418,10 +437,11 @@ export const FirebaseAdapter = {
 
   async signInAdminWithPhone(phone: string, password: string): Promise<AdminUserState> {
     const email = resolveAdminEmailForPhone(phone, ADMIN_PHONE, ADMIN_EMAIL);
-    if (!email || !password) {
+    const cleanPass = String(password || '').trim();
+    if (!email || !cleanPass) {
       throw new Error('Invalid mobile number or password.');
     }
-    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, cleanPass);
     verifiedAdminCache = null;
     const user = cred.user;
     const isAdmin = await checkIsAdminUser(user);
@@ -785,6 +805,42 @@ export const FirebaseAdapter = {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `inquiries/${safeId}`);
     }
+  },
+
+  async trackEvent(input: {
+    type: AnalyticsEventType;
+    projectId?: string;
+    projectTitle?: string;
+  }): Promise<boolean> {
+    const normalized = normalizeAnalyticsEventPayload(input, generateId('evt'));
+    if (!normalized) return false;
+    try {
+      await setDoc(doc(db, 'analytics_events', normalized.id), {
+        ...normalized,
+        createdAt: serverTimestamp(),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async getAnalyticsSummary(projectsList?: PortfolioProject[]): Promise<AnalyticsSummary> {
+    await requireVerifiedAdmin();
+    let snap;
+    try {
+      snap = await getDocs(
+        query(collection(db, 'analytics_events'), orderBy('createdAt', 'desc'), limit(2500))
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'analytics_events');
+    }
+    const events: Partial<AnalyticsEventRecord>[] = [];
+    snap.forEach((docSnap) => {
+      events.push(docSnap.data() as Partial<AnalyticsEventRecord>);
+    });
+    const projects = Array.isArray(projectsList) ? projectsList : await this.getProjects(true);
+    return aggregateAnalyticsEvents(events, projects);
   },
 
   async checkHealth(): Promise<{

@@ -27,7 +27,52 @@ export const SCHEMA_LIMITS = {
   inquiryDate: 40,
   inquiryLocation: 200,
   inquiryMessage: 2000,
+  analyticsType: 32,
+  analyticsProjectId: 128,
+  analyticsProjectTitle: 200,
 } as const;
+
+export const ANALYTICS_EVENT_TYPES = [
+  'visitor',
+  'home',
+  'portfolio',
+  'services',
+  'book',
+  'whatsapp',
+  'project_view',
+] as const;
+
+export type AnalyticsEventType = (typeof ANALYTICS_EVENT_TYPES)[number];
+
+export interface AnalyticsEventRecord {
+  id: string;
+  type: AnalyticsEventType;
+  projectId: string;
+  projectTitle: string;
+  created_at: string;
+}
+
+export interface ProjectViewStat {
+  projectId: string;
+  title: string;
+  category: string;
+  coverUrl: string;
+  views: number;
+}
+
+export interface AnalyticsSummary {
+  visitors: number;
+  home: number;
+  portfolio: number;
+  services: number;
+  book: number;
+  whatsapp: number;
+  totalClicks: number;
+  totalProjectViews: number;
+  projectViews: ProjectViewStat[];
+  topProject: ProjectViewStat | null;
+  lastUpdatedAt: string;
+}
 
 export interface GalleryImage {
   id: string;
@@ -132,6 +177,34 @@ export function resolveAdminEmailForPhone(
   const expected = normalizePhoneNumber(allowedPhone);
   if (!input || !expected || input !== expected) return null;
   return adminEmail;
+}
+
+export function isAllowedAdminEmail(
+  email: unknown,
+  allowedEmails: readonly string[]
+): boolean {
+  if (typeof email !== 'string' || !email.trim()) return false;
+  const normalized = email.trim().toLowerCase();
+  return allowedEmails.some((e) => e.trim().toLowerCase() === normalized);
+}
+
+export function isAuthorizedAdminIdentity(
+  identity: {
+    uid?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+  } | null,
+  allowedEmails: readonly string[],
+  primaryAdminUid?: string
+): boolean {
+  if (!identity) return false;
+  if (primaryAdminUid && identity.uid && identity.uid === primaryAdminUid) {
+    return true;
+  }
+  if (identity.emailVerified === true && isAllowedAdminEmail(identity.email, allowedEmails)) {
+    return true;
+  }
+  return false;
 }
 
 export function truncateStr(val: unknown, maxLen: number): string {
@@ -284,4 +357,132 @@ export function sortProjects<T extends { sort_order?: number; created_at?: strin
 
 export function filterPublishedProjects<T extends { is_published?: boolean }>(list: T[]): T[] {
   return list.filter((p) => p.is_published !== false);
+}
+
+export function normalizeAnalyticsEventPayload(
+  input: { type: unknown; projectId?: unknown; projectTitle?: unknown },
+  rawId?: string
+): AnalyticsEventRecord | null {
+  const rawType = typeof input.type === 'string' ? input.type.trim() : '';
+  if (!(ANALYTICS_EVENT_TYPES as readonly string[]).includes(rawType)) {
+    return null;
+  }
+  const type = rawType as AnalyticsEventType;
+  const projectId =
+    type === 'project_view'
+      ? truncateStr(String(input.projectId ?? '').trim(), SCHEMA_LIMITS.analyticsProjectId)
+      : '';
+  const projectTitle =
+    type === 'project_view'
+      ? truncateStr(String(input.projectTitle ?? '').trim(), SCHEMA_LIMITS.analyticsProjectTitle)
+      : '';
+
+  return {
+    id: sanitizeId(rawId, 'evt'),
+    type,
+    projectId,
+    projectTitle,
+    created_at: new Date().toISOString().slice(0, SCHEMA_LIMITS.createdAtStr),
+  };
+}
+
+export function aggregateAnalyticsEvents(
+  events: Array<Partial<AnalyticsEventRecord>>,
+  projects: Array<{
+    id: string;
+    title?: string;
+    category?: string;
+    cover_image_url?: string;
+    gallery_images?: Array<{ url?: string }>;
+  }> = []
+): AnalyticsSummary {
+  const counts = {
+    visitor: 0,
+    home: 0,
+    portfolio: 0,
+    services: 0,
+    book: 0,
+    whatsapp: 0,
+  };
+
+  const viewMap = new Map<string, { views: number; fallbackTitle: string }>();
+  let totalProjectViews = 0;
+
+  for (const ev of events || []) {
+    const t = ev?.type;
+    if (t === 'visitor') counts.visitor += 1;
+    else if (t === 'home') counts.home += 1;
+    else if (t === 'portfolio') counts.portfolio += 1;
+    else if (t === 'services') counts.services += 1;
+    else if (t === 'book') counts.book += 1;
+    else if (t === 'whatsapp') counts.whatsapp += 1;
+    else if (t === 'project_view') {
+      totalProjectViews += 1;
+      const pid = String(ev.projectId || '').trim();
+      const title = String(ev.projectTitle || '').trim();
+      const key = pid || (title ? `title:${title.toLowerCase()}` : 'unknown');
+      const prev = viewMap.get(key);
+      if (prev) {
+        prev.views += 1;
+        if (!prev.fallbackTitle && title) prev.fallbackTitle = title;
+      } else {
+        viewMap.set(key, { views: 1, fallbackTitle: title || pid || 'Untitled Project' });
+      }
+    }
+  }
+
+  const projectById = new Map<string, (typeof projects)[number]>();
+  for (const p of projects || []) {
+    if (p && p.id) projectById.set(p.id, p);
+  }
+
+  const statsMap = new Map<string, ProjectViewStat>();
+
+  for (const p of projects || []) {
+    if (!p || !p.id) continue;
+    const entry = viewMap.get(p.id);
+    const cover = p.cover_image_url || p.gallery_images?.[0]?.url || '';
+    statsMap.set(p.id, {
+      projectId: p.id,
+      title: p.title || entry?.fallbackTitle || 'Untitled Project',
+      category: p.category || '',
+      coverUrl: cover,
+      views: entry ? entry.views : 0,
+    });
+  }
+
+  for (const [key, entry] of viewMap.entries()) {
+    if (!statsMap.has(key) && !projectById.has(key)) {
+      statsMap.set(key, {
+        projectId: key,
+        title: entry.fallbackTitle,
+        category: '',
+        coverUrl: '',
+        views: entry.views,
+      });
+    }
+  }
+
+  const projectViews = Array.from(statsMap.values()).sort((a, b) => {
+    if (b.views !== a.views) return b.views - a.views;
+    return a.title.localeCompare(b.title);
+  });
+
+  const topProject = projectViews.length > 0 && projectViews[0].views > 0 ? projectViews[0] : null;
+  const totalClicks =
+    counts.home + counts.portfolio + counts.services + counts.book + counts.whatsapp;
+
+  return {
+    visitors: counts.visitor,
+    home: counts.home,
+    portfolio: counts.portfolio,
+    services: counts.services,
+    book: counts.book,
+    whatsapp: counts.whatsapp,
+    totalClicks,
+    totalProjectViews,
+    projectViews,
+    topProject,
+    lastUpdatedAt: new Date().toISOString(),
+  };
 }
