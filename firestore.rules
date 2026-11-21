@@ -1,0 +1,249 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------- Global Primitives ----------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'netlify335@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // ---------- Validation Blueprints ----------
+    function isValidProject(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'slug', 'category', 'location', 'year',
+          'ticket_rows', 'short_key', 'short_desc', 'full_description',
+          'youtube_urls', 'preview_video_url', 'cover_image_url',
+          'gallery_images', 'sort_order', 'is_published',
+          'created_at', 'createdAt', 'updatedAt', 'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'id', 'title', 'slug', 'category', 'location', 'year',
+          'ticket_rows', 'short_key', 'short_desc', 'full_description',
+          'youtube_urls', 'preview_video_url', 'cover_image_url',
+          'gallery_images', 'sort_order', 'is_published',
+          'created_at', 'createdAt', 'updatedAt', 'updatedBy'
+        ])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.slug is string && data.slug.size() <= 200
+        && data.category is string && data.category.size() <= 120
+        && data.location is string && data.location.size() <= 200
+        && data.year is string && data.year.size() <= 20
+        && data.ticket_rows is list && data.ticket_rows.size() <= 5
+        && (data.ticket_rows.size() == 0 || (data.ticket_rows[0] is string && data.ticket_rows[0].size() <= 120))
+        && data.short_key is string && data.short_key.size() <= 160
+        && data.short_desc is string && data.short_desc.size() <= 500
+        && data.full_description is string && data.full_description.size() <= 8000
+        && data.youtube_urls is list && data.youtube_urls.size() <= 30
+        && (data.youtube_urls.size() == 0 || (data.youtube_urls[0] is string && data.youtube_urls[0].size() <= 500))
+        && data.preview_video_url is string && data.preview_video_url.size() <= 1000
+        && data.cover_image_url is string && data.cover_image_url.size() <= 2000
+        && data.gallery_images is list && data.gallery_images.size() <= 100
+        && (data.gallery_images.size() == 0 || data.gallery_images[0] is map)
+        && data.sort_order is number && data.sort_order >= 0 && data.sort_order <= 10000
+        && data.is_published is bool
+        && data.created_at is string && data.created_at.size() <= 64
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.updatedBy is string && data.updatedBy.size() <= 128 && data.updatedBy == request.auth.uid;
+    }
+
+    function isValidSiteContent(data) {
+      return data.keys().hasAll(['id', 'data', 'seeded', 'updatedAt', 'updatedBy'])
+        && data.keys().hasOnly(['id', 'data', 'seeded', 'updatedAt', 'updatedBy'])
+        && data.id is string && data.id == 'main' && data.id.size() <= 32
+        && data.data is map
+        && data.data.keys().hasOnly(['hero', 'badge', 'nav', 'contact', 'socials', 'services'])
+        && data.seeded is bool
+        && data.updatedAt is timestamp
+        && data.updatedBy is string && data.updatedBy.size() <= 128 && data.updatedBy == request.auth.uid;
+    }
+
+    function isValidMedia(data) {
+      return data.keys().hasAll(['id', 'dataUrl', 'mimeType', 'width', 'height', 'createdAt', 'uploadedBy'])
+        && data.keys().hasOnly(['id', 'dataUrl', 'mimeType', 'width', 'height', 'createdAt', 'uploadedBy'])
+        && isValidId(data.id)
+        && data.dataUrl is string && data.dataUrl.size() >= 20 && data.dataUrl.size() <= 850000
+        && data.mimeType is string && data.mimeType.size() <= 40
+        && data.mimeType in ['image/webp', 'image/jpeg', 'image/png']
+        && data.width is number && data.width >= 1 && data.width <= 4096
+        && data.height is number && data.height >= 1 && data.height <= 4096
+        && data.createdAt is timestamp
+        && data.uploadedBy is string && data.uploadedBy.size() <= 128 && data.uploadedBy == request.auth.uid;
+    }
+
+    function isValidInquiry(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'phone', 'shoot_type', 'shoot_date',
+          'shoot_location', 'message', 'created_at', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'phone', 'shoot_type', 'shoot_date',
+          'shoot_location', 'message', 'created_at', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.phone is string && data.phone.size() <= 40
+        && data.shoot_type is string && data.shoot_type.size() <= 120
+        && data.shoot_date is string && data.shoot_date.size() <= 40
+        && data.shoot_location is string && data.shoot_location.size() <= 200
+        && data.message is string && data.message.size() <= 2000
+        && data.created_at is string && data.created_at.size() <= 64
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['email', 'role', 'createdAt'])
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.role is string && data.role == 'admin' && data.role.size() <= 20
+        && data.createdAt is timestamp;
+    }
+
+    // ---------- /projects/{projectId} ----------
+    match /projects/{projectId} {
+      allow get: if isValidId(projectId) && (existing().is_published == true || isAdmin());
+      allow list: if resource.data.is_published == true || isBootstrappedAdmin();
+
+      allow create: if isSignedIn()
+        && isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().id == projectId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isSignedIn()
+        && isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Admin full edit
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'slug', 'category', 'location', 'year',
+            'ticket_rows', 'short_key', 'short_desc', 'full_description',
+            'youtube_urls', 'preview_video_url', 'cover_image_url',
+            'gallery_images', 'sort_order', 'is_published',
+            'updatedAt', 'updatedBy'
+          ])) ||
+          // Action: Admin reorder only
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'sort_order', 'updatedAt', 'updatedBy'
+          ]))
+        );
+
+      allow delete: if isSignedIn() && isValidId(projectId) && isAdmin();
+    }
+
+    // ---------- /site_content/{docId} ----------
+    match /site_content/{docId} {
+      allow get: if isValidId(docId) && docId == 'main';
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && isValidId(docId)
+        && docId == 'main'
+        && isValidSiteContent(incoming())
+        && incoming().updatedAt == request.time
+        && isAdmin();
+
+      allow update: if isSignedIn()
+        && isValidId(docId)
+        && docId == 'main'
+        && isValidSiteContent(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'data', 'seeded', 'updatedAt', 'updatedBy'
+        ]);
+
+      allow delete: if isSignedIn() && isValidId(docId) && docId == 'main' && isAdmin();
+    }
+
+    // ---------- /media/{mediaId} ----------
+    match /media/{mediaId} {
+      allow get: if isValidId(mediaId);
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && isValidId(mediaId)
+        && isValidMedia(incoming())
+        && incoming().id == mediaId
+        && incoming().createdAt == request.time
+        && isAdmin();
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(mediaId) && isAdmin();
+    }
+
+    // ---------- /inquiries/{inquiryId} ----------
+    match /inquiries/{inquiryId} {
+      allow get: if isSignedIn() && isValidId(inquiryId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isValidId(inquiryId)
+        && isValidInquiry(incoming())
+        && incoming().id == inquiryId
+        && incoming().createdAt == request.time;
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(inquiryId) && isAdmin();
+    }
+
+    // ---------- /admins/{adminId} ----------
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isBootstrappedAdmin());
+      allow list: if isBootstrappedAdmin();
+
+      allow create: if isSignedIn()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming())
+        && incoming().createdAt == request.time
+        && isBootstrappedAdmin();
+
+      allow update: if isSignedIn()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming())
+        && incoming().createdAt == existing().createdAt
+        && isBootstrappedAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'role']);
+
+      allow delete: if isSignedIn() && isValidId(adminId) && isBootstrappedAdmin();
+    }
+  }
+}

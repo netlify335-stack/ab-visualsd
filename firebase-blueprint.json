@@ -1,0 +1,280 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A portfolio case study displayed in AB VISUALS laptop view, all-projects grid, and cinema showcase.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "slug": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "year": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ticket_rows": {
+          "type": "array",
+          "description": "Up to 5 short metadata lines for the ticket card."
+        },
+        "short_key": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "short_desc": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "full_description": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "youtube_urls": {
+          "type": "array",
+          "description": "Up to 30 YouTube video links."
+        },
+        "preview_video_url": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "cover_image_url": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "gallery_images": {
+          "type": "array",
+          "description": "Up to 100 gallery image metadata objects."
+        },
+        "sort_order": {
+          "type": "number"
+        },
+        "is_published": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "slug",
+        "category",
+        "location",
+        "year",
+        "ticket_rows",
+        "short_key",
+        "short_desc",
+        "full_description",
+        "youtube_urls",
+        "preview_video_url",
+        "cover_image_url",
+        "gallery_images",
+        "sort_order",
+        "is_published",
+        "created_at",
+        "createdAt",
+        "updatedAt",
+        "updatedBy"
+      ]
+    },
+    "SiteContent": {
+      "title": "SiteContent",
+      "description": "Global CMS configuration for hero copy, lanyard badge, navigation labels, public contact links, and services.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^main$"
+        },
+        "data": {
+          "type": "object",
+          "description": "Structured CMS data map (hero, badge, nav, contact, socials, services)."
+        },
+        "seeded": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": ["id", "data", "seeded", "updatedAt", "updatedBy"]
+    },
+    "MediaAsset": {
+      "title": "MediaAsset",
+      "description": "Compressed WebP/JPEG image asset stored in Firestore as a resilient fallback when Firebase Storage is unavailable.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dataUrl": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 850000
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": ["image/webp", "image/jpeg", "image/png"],
+          "maxLength": 40
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uploadedBy": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": ["id", "dataUrl", "mimeType", "width", "height", "createdAt", "uploadedBy"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Booking inquiry submitted by a visitor from the public booking drawer. Contains PII and is readable only by admins.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "shoot_type": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "shoot_date": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "shoot_location": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "created_at": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "phone",
+        "shoot_type",
+        "shoot_date",
+        "shoot_location",
+        "message",
+        "created_at",
+        "createdAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized studio administrator record.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"],
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Portfolio case studies. Publicly readable when is_published == true; writable only by verified studio admins."
+    },
+    "/site_content/{docId}": {
+      "schema": { "$ref": "#/entities/SiteContent" },
+      "description": "Singleton global CMS document at /site_content/main. Publicly readable; writable only by verified studio admins."
+    },
+    "/media/{mediaId}": {
+      "schema": { "$ref": "#/entities/MediaAsset" },
+      "description": "Fallback compressed image documents referenced by projects and site_content. Publicly readable by exact ID; writable only by verified studio admins."
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/Inquiry" },
+      "description": "Visitor shoot inquiries containing PII. Publicly creatable with strict validation; readable and deletable only by verified studio admins."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Studio administrator allowlist. Managed only by the bootstrapped primary admin."
+    }
+  }
+}
